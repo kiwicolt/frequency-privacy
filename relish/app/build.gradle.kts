@@ -18,6 +18,10 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         vectorDrawables { useSupportLibrary = true }
+        // Reddit "installed app" client id (public by design: installed apps have no secret).
+        // Override with -PredditClientId=... or change it in Settings › Account.
+        val clientId = (project.findProperty("redditClientId") as String?) ?: "96oTCRcyGdmvGQvHIk7MHQ"
+        buildConfigField("String", "REDDIT_CLIENT_ID", "\"$clientId\"")
     }
 
     buildTypes {

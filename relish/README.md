@@ -20,10 +20,10 @@ You need the Android SDK (compileSdk 35) and JDK 17. The app runs on minSdk 26 (
 
 * **Anonymous browsing works straight away.** It uses the web `.json` layer with the over18 cookie,
   so you don't need an account or an API key.
-* **To log in**, go to <https://www.reddit.com/prefs/apps> and create an app of type
-  **installed app** with the redirect URI `relish://oauth`. Paste its client ID into
-  *Settings › Account › Reddit API client id*, or into the Log in screen. Logging in unlocks voting,
-  saving, replying, account subscriptions, multireddits, saved posts and the inbox.
+* **To log in**, tap *Log in with Reddit* in the drawer. A client ID for an installed app is built
+  in (set it in `app/build.gradle.kts`, or override it with `-PredditClientId=…` or in
+  *Settings › Account*). Its Reddit app must have the redirect URI `relish://oauth`. Logging in
+  unlocks voting, saving, replying, account subscriptions, multireddits, saved posts and the inbox.
 
 ## Hybrid network engine (NSFW handling)
 
