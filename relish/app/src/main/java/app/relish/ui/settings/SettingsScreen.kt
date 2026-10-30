@@ -60,6 +60,7 @@ import app.relish.data.prefs.PostLayout
 import app.relish.data.prefs.ThemeMode
 import app.relish.data.prefs.ThumbnailMode
 import app.relish.ui.MainViewModel
+import app.relish.ui.common.rememberClientIdImporter
 import app.relish.ui.nav.LocalMessenger
 import app.relish.ui.nav.LocalNavigator
 import app.relish.ui.theme.MetaTextStyle
@@ -86,6 +87,10 @@ fun SettingsScreen(main: MainViewModel, vm: SettingsViewModel = hiltViewModel())
     val filters by vm.filters.collectAsStateWithLifecycle()
     val username by main.username.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<SettingsDialog?>(null) }
+    val importClientId = rememberClientIdImporter { result ->
+        result.onSuccess { vm.setClientId(it); messenger("Client id set to $it") }
+            .onFailure { messenger(it.message ?: "Import failed") }
+    }
 
     LaunchedEffect(Unit) { vm.events.collect { messenger(it) } }
 
@@ -115,9 +120,12 @@ fun SettingsScreen(main: MainViewModel, vm: SettingsViewModel = hiltViewModel())
                 }
             }
             item {
-                ClickPref("Reddit API client id", if (clientId.isBlank()) "Not set (installed-app id from reddit.com/prefs/apps)" else "••••" + clientId.takeLast(4)) {
+                ClickPref("Reddit API client id", clientId.ifBlank { "Not set" }) {
                     dialog = SettingsDialog.TextInput("Client id", clientId, "Installed-app client id", vm::setClientId)
                 }
+            }
+            item {
+                ClickPref("Import client id from file", "e.g. reddit_client_id_revanced.txt from ReVanced", onClick = importClientId)
             }
             item {
                 ClickPref("OAuth redirect URI", "$redirect (must match the Reddit app registration)") {

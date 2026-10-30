@@ -6,6 +6,7 @@ import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.relish.data.prefs.SecureStore
 import app.relish.data.repo.RedditRepository
 import app.relish.ui.MainViewModel
+import app.relish.ui.common.rememberClientIdImporter
 import app.relish.ui.nav.LocalNavigator
 import app.relish.ui.theme.MetaTextStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -84,6 +86,11 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
     val initialUser = remember { username }
     var embedded by remember { mutableStateOf(false) }
     var page by remember { mutableIntStateOf(0) }
+    BackHandler(enabled = embedded) { embedded = false }
+    val importClientId = rememberClientIdImporter { result ->
+        result.onSuccess { vm.setClientId(it); main.showMessage("Client id set to $it"); embedded = false }
+            .onFailure { main.showMessage(it.message ?: "Import failed") }
+    }
 
     // Pop once the login completes (either path).
     LaunchedEffect(username) { if (username != null && username != initialUser) nav.back() }
@@ -100,7 +107,7 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
     Scaffold(
         topBar = {
             TopAppBar(
-                navigationIcon = { IconButton(onClick = nav::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                navigationIcon = { IconButton(onClick = { if (embedded) embedded = false else nav.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 title = { Text("Log in to Reddit") },
             )
         },
@@ -164,9 +171,13 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
                         style = MetaTextStyle,
                     )
                     Spacer(Modifier.height(16.dp))
+                    Text("Client id: $clientId", style = MetaTextStyle)
+                    TextButton(onClick = importClientId, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Import client id from file (reddit_client_id_revanced.txt)")
+                    }
                     Text(
-                        "If Reddit shows an error page, the API app for this client id may not be approved yet. " +
-                            "Browsing still works without logging in.",
+                        "If Reddit says \"Invalid or missing client_id\", the id above doesn't match your Reddit app. " +
+                            "Import it from the ReVanced file, or copy it from reddit.com/prefs/apps.",
                         style = MetaTextStyle,
                     )
                 }
