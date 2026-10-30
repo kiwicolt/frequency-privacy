@@ -65,6 +65,12 @@ import javax.inject.Singleton
 
 class NotLoggedInException(action: String) : IllegalStateException("Log in to $action")
 
+/** Both transports refused a read; carries both causes so the UI can show what actually happened. */
+class BothRoutesFailedException(val web: Throwable, val oauth: Throwable) : IOException("Both routes failed")
+
+private fun isWebRefusal(e: Throwable) =
+    (e is HttpException && e.code() in setOf(401, 403, 429)) || e is SerializationException || e is IllegalArgumentException
+
 @Singleton
 class RedditRepository @Inject constructor(
     @OAuthApi private val oauthApi: RedditApiService,
@@ -115,7 +121,22 @@ class RedditRepository @Inject constructor(
             ContentRouting.PUBLIC_JSON -> personal && loggedIn
             ContentRouting.AUTO -> loggedIn
         }
-        if (!useOAuth) return@withContext publicApi.call()
+        if (!useOAuth) {
+            return@withContext try {
+                publicApi.call()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                // Web JSON refused (403/429) or answered with an HTML block page: use OAuth with an
+                // application-only token instead. NSFW may be filtered there, but the feed loads.
+                if (s.routing == ContentRouting.PUBLIC_JSON || !oauth.hasClientId || !isWebRefusal(e)) throw e
+                try {
+                    oauthApi.call()
+                } catch (o: Exception) {
+                    if (o is kotlinx.coroutines.CancellationException) throw o
+                    throw BothRoutesFailedException(e, o)
+                }
+            }
+        }
 
         val canFallBack = s.routing != ContentRouting.OAUTH_ONLY && s.showNsfw
         try {
@@ -368,18 +389,19 @@ class RedditRepository @Inject constructor(
         }
 
         fun friendlyError(e: Throwable): String = when (e) {
+            is BothRoutesFailedException ->
+                "Reddit refused anonymous web access (${friendlyError(e.web)}), and the OAuth fallback failed: ${friendlyError(e.oauth)}"
             is NotLoggedInException -> e.message ?: "Log in first"
             is OAuthException -> e.message ?: "Authentication failed"
             is HttpException -> when (e.code()) {
                 401 -> "Not authorised (401). Try logging in again."
-                403 -> "Forbidden (403): private, quarantined or banned community"
+                403 -> "Forbidden (403)"
                 404 -> "Not found (404)"
                 429 -> "Rate limited by Reddit (429). Slow down a little."
                 in 500..599 -> "Reddit is having trouble (${e.code()})"
                 else -> "HTTP ${e.code()}"
             }
-            is SerializationException, is IllegalArgumentException ->
-                "Unexpected response from Reddit. If this keeps happening on web JSON routing, add an OAuth client id in Settings."
+            is SerializationException, is IllegalArgumentException -> "Reddit returned a block page instead of data"
             is IOException -> "Network error: ${e.message ?: "check your connection"}"
             else -> e.message ?: e.javaClass.simpleName
         }

@@ -20,6 +20,13 @@ import javax.inject.Singleton
 const val USER_AGENT = "android:app.relish:v${BuildConfig.VERSION_NAME} (personal client)"
 
 /**
+ * The public `.json` pages are served to browsers; Reddit refuses them (403) for API-style user
+ * agents, so the web transport identifies as the phone's mobile browser would.
+ */
+const val BROWSER_USER_AGENT =
+    "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+
+/**
  * Client-side sliding-window limiter shared by every API request (both transports): at most
  * [maxRequests] per [windowMs]. Also honours Reddit's `x-ratelimit-*` headers when the server says
  * the budget is exhausted. Blocking by design — it runs on OkHttp's dispatcher threads.
@@ -121,7 +128,9 @@ class PublicJsonInterceptor(
             }
             secureStore.sessionCookie.value.takeIf { it.isNotBlank() }?.let { add(it.trim().trimEnd(';')) }
         }
-        val builder = req.newBuilder().url(newUrl).header("Accept", "application/json")
+        val builder = req.newBuilder().url(newUrl)
+            .header("User-Agent", BROWSER_USER_AGENT)
+            .header("Accept", "application/json, text/plain, */*")
         if (cookies.isNotEmpty()) builder.header("Cookie", cookies.joinToString("; "))
         return chain.proceed(builder.build())
     }

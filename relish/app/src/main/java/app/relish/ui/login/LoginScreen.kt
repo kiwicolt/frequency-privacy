@@ -63,8 +63,9 @@ class LoginViewModel @Inject constructor(
 }
 
 /**
- * OAuth login in an embedded WebView (the redirect is intercepted, so no browser hand-off is
- * needed). "Use browser instead" opens a Custom Tab; MainActivity catches relish://oauth.
+ * OAuth login. Defaults to the system browser (Custom Tab): Google/Apple sign-in and an existing
+ * reddit.com session work there, and MainActivity receives the relish://oauth redirect. The
+ * embedded WebView (redirect intercepted directly) is offered as a fallback.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,54 +77,79 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
     val username by main.username.collectAsStateWithLifecycle()
     val busy by main.loginInProgress.collectAsStateWithLifecycle()
     val initialUser = remember { username }
+    var embedded by remember { mutableStateOf(false) }
 
     // Pop once the login completes (either path).
     LaunchedEffect(username) { if (username != null && username != initialUser) nav.back() }
+
+    fun openBrowser() {
+        vm.loginUrl()
+            .onSuccess { url ->
+                runCatching { CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url)) }
+                    .onFailure { embedded = true }
+            }
+            .onFailure { main.showMessage(RedditRepository.friendlyError(it)) }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = { IconButton(onClick = nav::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 title = { Text("Log in to Reddit") },
-                actions = {
-                    if (clientId.isNotBlank()) {
-                        TextButton(onClick = {
-                            vm.loginUrl().onSuccess { CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(it)) }
-                        }) {
-                            Icon(Icons.Default.OpenInBrowser, null)
-                            Text(" Browser")
-                        }
-                    }
-                },
             )
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (clientId.isBlank()) {
-                ClientIdSetup(onSave = vm::setClientId)
-            } else {
-                val url = remember(clientId) { vm.loginUrl().getOrNull() }
-                if (url != null) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            WebView(ctx).apply {
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                webViewClient = object : WebViewClient() {
-                                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                                        val target = request.url.toString()
-                                        if (vm.isRedirect(target)) {
-                                            main.completeLogin(request.url)
-                                            return true
+            when {
+                clientId.isBlank() -> ClientIdSetup(onSave = vm::setClientId)
+                embedded -> {
+                    val url = remember(clientId) { vm.loginUrl().getOrNull() }
+                    if (url != null) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { ctx ->
+                                WebView(ctx).apply {
+                                    settings.javaScriptEnabled = true
+                                    settings.domStorageEnabled = true
+                                    webViewClient = object : WebViewClient() {
+                                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                                            if (vm.isRedirect(request.url.toString())) {
+                                                main.completeLogin(request.url)
+                                                return true
+                                            }
+                                            return false
                                         }
-                                        return false
                                     }
+                                    loadUrl(url)
                                 }
-                                loadUrl(url)
-                            }
-                        },
-                        onRelease = { it.destroy() },
+                            },
+                            onRelease = { it.destroy() },
+                        )
+                    }
+                }
+                else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
+                    Text("Log in with your Reddit account", style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Reddit's login page opens in your browser. Approve access there and you'll be brought " +
+                            "back here automatically. This works with Google/Apple sign-in and any Reddit session " +
+                            "already open in your browser.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    Button(onClick = ::openBrowser, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.OpenInBrowser, null)
+                        Text("  Log in with browser")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { embedded = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Use in-app login instead (username + password only)")
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "If Reddit shows an error page, the API app for this client id may not be approved yet. " +
+                            "Browsing still works without logging in.",
+                        style = MetaTextStyle,
                     )
                 }
             }

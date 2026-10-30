@@ -28,7 +28,6 @@ class OAuthManager @Inject constructor(
     private val auth: RedditAuthService,
 ) {
     private val mutex = Mutex()
-    @Volatile private var pendingState: String? = null
 
     val hasClientId: Boolean get() = store.clientId.value.isNotBlank()
     val isLoggedIn: Boolean get() = store.username.value != null && store.token?.isUser == true
@@ -36,8 +35,8 @@ class OAuthManager @Inject constructor(
     fun currentAccessToken(): String? = store.token?.accessToken
 
     fun authorizeUrl(): String {
-        val state = UUID.randomUUID().toString().also { pendingState = it }
-        return Uri.parse("https://www.reddit.com/api/v1/authorize.compact").buildUpon()
+        val state = UUID.randomUUID().toString().also { store.pendingOAuthState = it }
+        return Uri.parse("https://www.reddit.com/api/v1/authorize").buildUpon()
             .appendQueryParameter("client_id", store.clientId.value)
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("state", state)
@@ -51,16 +50,24 @@ class OAuthManager @Inject constructor(
 
     /** Handles `relish://oauth?state=…&code=…`. Returns normally on success. */
     suspend fun completeLogin(redirect: Uri) {
-        redirect.getQueryParameter("error")?.let { throw OAuthException("Reddit denied access: $it") }
-        val state = redirect.getQueryParameter("state")
-        if (state == null || state != pendingState) throw OAuthException("OAuth state mismatch; please try again")
-        val code = redirect.getQueryParameter("code") ?: throw OAuthException("No authorization code returned")
-        pendingState = null
-        mutex.withLock {
-            val res = auth.accessToken(
-                basic(),
-                mapOf("grant_type" to "authorization_code", "code" to code, "redirect_uri" to store.redirectUri),
+        redirect.getQueryParameter("error")?.let {
+            throw OAuthException(
+                if (it == "access_denied") "Login cancelled" else "Reddit rejected the login ($it). Check the app's client id and redirect URI (relish://oauth)."
             )
+        }
+        val state = redirect.getQueryParameter("state")
+        if (state == null || state != store.pendingOAuthState) throw OAuthException("OAuth state mismatch; please try again")
+        val code = redirect.getQueryParameter("code") ?: throw OAuthException("No authorization code returned")
+        store.pendingOAuthState = null
+        mutex.withLock {
+            val res = try {
+                auth.accessToken(
+                    basic(),
+                    mapOf("grant_type" to "authorization_code", "code" to code, "redirect_uri" to store.redirectUri),
+                )
+            } catch (e: retrofit2.HttpException) {
+                throw OAuthException("Reddit refused the token exchange (HTTP ${e.code()}). The API app may not be approved yet.")
+            }
             store.token = res.toToken(isUser = true)
         }
     }
@@ -91,6 +98,11 @@ class OAuthManager @Inject constructor(
         runBlocking { validToken(forceRefresh) }
     } catch (e: IOException) {
         throw e
+    } catch (e: retrofit2.HttpException) {
+        throw OAuthException(
+            if (e.code() == 401) "Reddit rejected the client id (401). The API app may not be approved yet."
+            else "Token request failed (HTTP ${e.code()})"
+        )
     } catch (e: Exception) {
         throw OAuthException("Token request failed: ${e.message}")
     }
@@ -106,7 +118,12 @@ class OAuthManager @Inject constructor(
     private fun basic() = Credentials.basic(store.clientId.value, "")
 
     private fun TokenResponse.toToken(isUser: Boolean): OAuthToken {
-        if (accessToken == null) throw OAuthException("Token request failed: ${error ?: "unknown error"}")
+        if (accessToken == null) {
+            throw OAuthException(
+                if (error == "unauthorized_client" || error == "invalid_grant") "Reddit rejected client id (\"$error\"). The API app may not be approved yet."
+                else "Token request failed: ${error ?: "unknown error"}"
+            )
+        }
         return OAuthToken(accessToken, refreshToken, System.currentTimeMillis() + expiresIn * 1000, isUser)
     }
 

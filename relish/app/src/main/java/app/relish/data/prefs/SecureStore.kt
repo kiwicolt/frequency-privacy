@@ -99,6 +99,11 @@ class SecureStore @Inject constructor(@ApplicationContext context: Context) {
             }
         }
 
+    /** CSRF `state` for an in-flight OAuth login; persisted so it survives process death. */
+    var pendingOAuthState: String?
+        get() = prefs.getString(KEY_STATE, null)
+        set(value) = prefs.edit { if (value == null) remove(KEY_STATE) else putString(KEY_STATE, value) }
+
     fun setUsername(name: String?) {
         prefs.edit { if (name == null) remove(KEY_USERNAME) else putString(KEY_USERNAME, name) }
         _username.value = name
@@ -120,5 +125,6 @@ class SecureStore @Inject constructor(@ApplicationContext context: Context) {
         private const val KEY_USERNAME = "username"
         private const val KEY_COOKIE = "session_cookie"
         private const val KEY_DEVICE_ID = "device_id"
+        private const val KEY_STATE = "oauth_state"
     }
 }

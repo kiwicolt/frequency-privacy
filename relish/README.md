@@ -114,7 +114,9 @@ app/src/main/java/app/relish/
 ## Known limitations
 
 * Imgur *albums* (`/a/…`) open in the browser, because they need an Imgur API key.
-* Unauthenticated `.json` access depends on Reddit tolerating it from your IP. If it starts
-  failing, log in and use **Auto** routing.
+* Unauthenticated `.json` access depends on Reddit tolerating it. The web transport sends a
+  mobile-browser user agent, and when Reddit still refuses it (403/429 or a block page), Auto
+  routing falls back to OAuth with an application-only token. NSFW may be filtered on that path
+  until you log in.
 * Submitting new posts and sending private messages aren't implemented. Replying to posts and
   comments is.
