@@ -132,11 +132,24 @@ class PublicJsonInterceptor(
             .header("User-Agent", BROWSER_USER_AGENT)
             .header("Accept", "application/json, text/plain, */*")
         if (cookies.isNotEmpty()) builder.header("Cookie", cookies.joinToString("; "))
-        return chain.proceed(builder.build())
+        val request = builder.build()
+        val response = chain.proceed(request)
+        if (!isBlocked(response) || request.url.host == OLD_HOST) return response
+
+        // www.reddit.com refused or served a block/interstitial page: old.reddit.com serves the same
+        // .json listings and is often more lenient with logged-out clients.
+        response.close()
+        return chain.proceed(request.newBuilder().url(request.url.newBuilder().host(OLD_HOST).build()).build())
     }
+
+    private fun isBlocked(response: Response): Boolean =
+        response.code == 403 || response.code == 429 ||
+            (response.isSuccessful && response.header("Content-Type").orEmpty().contains("html", ignoreCase = true))
 
     companion object {
         /** URL-encoded `{"pref_quarantine_optin": true, "pref_gated_sub_optin": true}`. */
+        private const val OLD_HOST = "old.reddit.com"
+
         const val OPTIN_OPTIONS = "%7B%22pref_quarantine_optin%22%3A%20true%2C%20%22pref_gated_sub_optin%22%3A%20true%7D"
     }
 }
