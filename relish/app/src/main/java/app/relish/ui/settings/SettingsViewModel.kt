@@ -34,6 +34,7 @@ class SettingsViewModel @Inject constructor(
     val settings: StateFlow<AppSettings> = prefs.current
     val clientId: StateFlow<String> = secure.clientId
     val sessionCookie: StateFlow<String> = secure.sessionCookie
+    val redirectUri: StateFlow<String> = secure.redirectUriFlow
     val filters: StateFlow<List<FilterEntity>> = repo.filters().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _events = Channel<String>(Channel.BUFFERED)
@@ -91,6 +92,7 @@ class SettingsViewModel @Inject constructor(
 
     // Account
     fun setClientId(v: String) = secure.setClientId(v)
+    fun setRedirectUri(v: String) = secure.setRedirectUri(v)
     fun setSessionCookie(v: String) = io { secure.setSessionCookie(v); repo.clearHttpCache() }
     fun syncSubscriptions() = io {
         runCatching { repo.syncSubscriptions() }

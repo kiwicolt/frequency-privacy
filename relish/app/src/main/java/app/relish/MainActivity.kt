@@ -38,6 +38,8 @@ class MainActivity : ComponentActivity() {
     /** OAuth redirect when login was completed in an external browser / Custom Tab. */
     private fun handleIntent(intent: Intent?) {
         val data = intent?.data ?: return
-        if (data.scheme == "relish" && data.host == "oauth") mainViewModel.completeLogin(data)
+        if ((data.scheme == "relish" && data.host == "oauth") || (data.scheme == "redditisfun" && data.host == "auth")) {
+            mainViewModel.completeLogin(data)
+        }
     }
 }

@@ -82,6 +82,7 @@ fun SettingsScreen(main: MainViewModel, vm: SettingsViewModel = hiltViewModel())
     val s by vm.settings.collectAsStateWithLifecycle()
     val clientId by vm.clientId.collectAsStateWithLifecycle()
     val cookie by vm.sessionCookie.collectAsStateWithLifecycle()
+    val redirect by vm.redirectUri.collectAsStateWithLifecycle()
     val filters by vm.filters.collectAsStateWithLifecycle()
     val username by main.username.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<SettingsDialog?>(null) }
@@ -116,6 +117,11 @@ fun SettingsScreen(main: MainViewModel, vm: SettingsViewModel = hiltViewModel())
             item {
                 ClickPref("Reddit API client id", if (clientId.isBlank()) "Not set (installed-app id from reddit.com/prefs/apps)" else "••••" + clientId.takeLast(4)) {
                     dialog = SettingsDialog.TextInput("Client id", clientId, "Installed-app client id", vm::setClientId)
+                }
+            }
+            item {
+                ClickPref("OAuth redirect URI", "$redirect (must match the Reddit app registration)") {
+                    dialog = SettingsDialog.TextInput("Redirect URI", redirect, "redditisfun://auth", vm::setRedirectUri)
                 }
             }
             item {

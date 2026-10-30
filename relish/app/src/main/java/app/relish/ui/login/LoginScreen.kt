@@ -131,20 +131,24 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
                     Text("Log in with your Reddit account", style = MaterialTheme.typography.titleLarge)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Reddit's login page opens in your browser. Approve access there and you'll be brought " +
-                            "back here automatically. This works with Google/Apple sign-in and any Reddit session " +
-                            "already open in your browser.",
+                        "Sign in with your Reddit username and password, then tap Allow. You'll be brought " +
+                            "back here automatically.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(20.dp))
-                    Button(onClick = ::openBrowser, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.OpenInBrowser, null)
-                        Text("  Log in with browser")
+                    Button(onClick = { embedded = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Log in")
                     }
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { embedded = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text("Use in-app login instead (username + password only)")
+                    TextButton(onClick = ::openBrowser, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.OpenInBrowser, null)
+                        Text("  Use browser instead (for Google/Apple sign-in)")
                     }
+                    Text(
+                        "With the browser, Android may ask which app should finish the login if Reddit is Fun " +
+                            "is also installed. Choose Relish.",
+                        style = MetaTextStyle,
+                    )
                     Spacer(Modifier.height(16.dp))
                     Text(
                         "If Reddit shows an error page, the API app for this client id may not be approved yet. " +

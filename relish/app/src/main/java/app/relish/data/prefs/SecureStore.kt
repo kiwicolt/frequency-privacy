@@ -50,7 +50,9 @@ class SecureStore @Inject constructor(@ApplicationContext context: Context) {
     /** Optional raw `Cookie` header copied from a logged-in browser session (e.g. `reddit_session=...`). */
     val sessionCookie: StateFlow<String> = _sessionCookie.asStateFlow()
 
-    val redirectUri: String get() = prefs.getString(KEY_REDIRECT, null) ?: DEFAULT_REDIRECT
+    private val _redirectUri = MutableStateFlow(prefs.getString(KEY_REDIRECT, null) ?: DEFAULT_REDIRECT)
+    val redirectUriFlow: StateFlow<String> = _redirectUri.asStateFlow()
+    val redirectUri: String get() = _redirectUri.value
 
     /** Stable per-install id required by the installed_client grant. */
     val deviceId: String
@@ -68,7 +70,11 @@ class SecureStore @Inject constructor(@ApplicationContext context: Context) {
         }
     }
 
-    fun setRedirectUri(uri: String) = prefs.edit { putString(KEY_REDIRECT, uri.trim().ifBlank { DEFAULT_REDIRECT }) }
+    fun setRedirectUri(uri: String) {
+        val v = uri.trim().ifBlank { DEFAULT_REDIRECT }
+        prefs.edit { putString(KEY_REDIRECT, v) }
+        _redirectUri.value = v
+    }
 
     fun setSessionCookie(cookie: String) {
         prefs.edit { putString(KEY_COOKIE, cookie.trim()) }
@@ -115,7 +121,11 @@ class SecureStore @Inject constructor(@ApplicationContext context: Context) {
     }
 
     companion object {
-        const val DEFAULT_REDIRECT = "relish://oauth"
+        /**
+         * Matches the redirect URI ReVanced has you register for Reddit is Fun, so an existing
+         * RIF client id works unchanged. Editable in Settings › Account for other app registrations.
+         */
+        const val DEFAULT_REDIRECT = "redditisfun://auth"
         private const val KEY_CLIENT_ID = "client_id"
         private const val KEY_REDIRECT = "redirect_uri"
         private const val KEY_ACCESS = "access_token"

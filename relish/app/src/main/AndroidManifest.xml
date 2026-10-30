@@ -33,6 +33,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="relish" android:host="oauth" />
             </intent-filter>
+            <!-- Redirect URI used by ReVanced Reddit is Fun client ids. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="redditisfun" android:host="auth" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

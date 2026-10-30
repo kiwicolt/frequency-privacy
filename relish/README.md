@@ -22,7 +22,9 @@ You need the Android SDK (compileSdk 35) and JDK 17. The app runs on minSdk 26 (
   so you don't need an account or an API key.
 * **To log in**, tap *Log in with Reddit* in the drawer. A client ID for an installed app is built
   in (set it in `app/build.gradle.kts`, or override it with `-PredditClientId=…` or in
-  *Settings › Account*). Its Reddit app must have the redirect URI `relish://oauth`. Logging in
+  *Settings › Account*). The redirect URI defaults to `redditisfun://auth`, so a client ID registered for ReVanced
+  Reddit is Fun works as-is. You can change it in *Settings › Account › OAuth redirect URI* if your
+  app is registered with a different one. Logging in
   unlocks voting, saving, replying, account subscriptions, multireddits, saved posts and the inbox.
 
 ## Hybrid network engine (NSFW handling)
