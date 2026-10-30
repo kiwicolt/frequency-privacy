@@ -116,9 +116,9 @@ app/src/main/java/app/relish/
 ## Known limitations
 
 * Imgur *albums* (`/a/…`) open in the browser, because they need an Imgur API key.
-* Unauthenticated `.json` access depends on Reddit tolerating it. The web transport sends a
-  mobile-browser user agent, and when Reddit still refuses it (403/429 or a block page), Auto
-  routing falls back to OAuth with an application-only token. NSFW may be filtered on that path
-  until you log in.
+* Logged-out browsing uses Reddit's public `.json` pages and only works while Reddit serves them
+  to apps. Reddit now often answers with a browser check instead, and Relish deliberately doesn't
+  try to get around that. Logging in (OAuth with your own client ID) is the reliable way to browse,
+  NSFW included via your account's 18+ setting.
 * Submitting new posts and sending private messages aren't implemented. Replying to posts and
   comments is.

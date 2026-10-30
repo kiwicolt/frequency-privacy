@@ -34,9 +34,9 @@ class OAuthManager @Inject constructor(
 
     fun currentAccessToken(): String? = store.token?.accessToken
 
-    fun authorizeUrl(): String {
+    fun authorizeUrl(page: Int = 0): String {
         val state = UUID.randomUUID().toString().also { store.pendingOAuthState = it }
-        return Uri.parse("https://www.reddit.com/api/v1/authorize").buildUpon()
+        return Uri.parse(AUTHORIZE_PAGES[page.mod(AUTHORIZE_PAGES.size)]).buildUpon()
             .appendQueryParameter("client_id", store.clientId.value)
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("state", state)
@@ -128,6 +128,17 @@ class OAuthManager @Inject constructor(
     }
 
     companion object {
+        /**
+         * Reddit's authorization page, in order of preference. The first is the classic HTML form
+         * (the same host ReVanced's Reddit is Fun uses); the modern page sometimes renders blank
+         * in WebViews, so the login screen lets you switch.
+         */
+        val AUTHORIZE_PAGES = listOf(
+            "https://ssl.reddit.com/api/v1/authorize.compact",
+            "https://www.reddit.com/api/v1/authorize",
+            "https://old.reddit.com/api/v1/authorize.compact",
+        )
+
         const val SCOPES = "identity edit history mysubreddits privatemessages read report save submit subscribe vote account"
     }
 }

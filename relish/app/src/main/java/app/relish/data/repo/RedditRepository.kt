@@ -143,7 +143,9 @@ class RedditRepository @Inject constructor(
             val result = oauthApi.call()
             if (canFallBack && isEmpty(result)) runCatching { publicApi.call() }.getOrDefault(result) else result
         } catch (e: HttpException) {
-            if (canFallBack && e.code() in NSFW_REFUSAL_CODES) publicApi.call() else throw e
+            if (canFallBack && e.code() in NSFW_REFUSAL_CODES) {
+                try { publicApi.call() } catch (_: Exception) { throw e }
+            } else throw e
         } catch (e: OAuthException) {
             if (s.routing != ContentRouting.OAUTH_ONLY) publicApi.call() else throw e
         }
@@ -220,9 +222,9 @@ class RedditRepository @Inject constructor(
     // Account
     // =========================================================================================
 
-    fun loginUrl(): String {
+    fun loginUrl(page: Int = 0): String {
         if (!oauth.hasClientId) throw OAuthException("Add your Reddit app client id in Settings › Account first")
-        return oauth.authorizeUrl()
+        return oauth.authorizeUrl(page)
     }
 
     fun isOAuthRedirect(url: String) = oauth.isRedirect(url)
@@ -390,7 +392,8 @@ class RedditRepository @Inject constructor(
 
         fun friendlyError(e: Throwable): String = when (e) {
             is BothRoutesFailedException ->
-                "Reddit refused anonymous web access (${friendlyError(e.web)}), and the OAuth fallback failed: ${friendlyError(e.oauth)}"
+                "Reddit is blocking logged-out access from apps (${friendlyError(e.web)}; app-only OAuth: ${friendlyError(e.oauth)}). " +
+                    "Log in from the drawer to browse."
             is NotLoggedInException -> e.message ?: "Log in first"
             is OAuthException -> e.message ?: "Authentication failed"
             is HttpException -> when (e.code()) {

@@ -17,14 +17,8 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-const val USER_AGENT = "android:app.relish:v${BuildConfig.VERSION_NAME} (personal client)"
-
-/**
- * The public `.json` pages are served to browsers; Reddit refuses them (403) for API-style user
- * agents, so the web transport identifies as the phone's mobile browser would.
- */
-const val BROWSER_USER_AGENT =
-    "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+/** Reddit API rules: `<platform>:<app id>:<version> (by /u/<username>)`. Used on every transport. */
+const val USER_AGENT = "android:app.relish:v${BuildConfig.VERSION_NAME} (by /u/relish_app)"
 
 /**
  * Client-side sliding-window limiter shared by every API request (both transports): at most
@@ -128,28 +122,13 @@ class PublicJsonInterceptor(
             }
             secureStore.sessionCookie.value.takeIf { it.isNotBlank() }?.let { add(it.trim().trimEnd(';')) }
         }
-        val builder = req.newBuilder().url(newUrl)
-            .header("User-Agent", BROWSER_USER_AGENT)
-            .header("Accept", "application/json, text/plain, */*")
+        val builder = req.newBuilder().url(newUrl).header("Accept", "application/json")
         if (cookies.isNotEmpty()) builder.header("Cookie", cookies.joinToString("; "))
-        val request = builder.build()
-        val response = chain.proceed(request)
-        if (!isBlocked(response) || request.url.host == OLD_HOST) return response
-
-        // www.reddit.com refused or served a block/interstitial page: old.reddit.com serves the same
-        // .json listings and is often more lenient with logged-out clients.
-        response.close()
-        return chain.proceed(request.newBuilder().url(request.url.newBuilder().host(OLD_HOST).build()).build())
+        return chain.proceed(builder.build())
     }
-
-    private fun isBlocked(response: Response): Boolean =
-        response.code == 403 || response.code == 429 ||
-            (response.isSuccessful && response.header("Content-Type").orEmpty().contains("html", ignoreCase = true))
 
     companion object {
         /** URL-encoded `{"pref_quarantine_optin": true, "pref_gated_sub_optin": true}`. */
-        private const val OLD_HOST = "old.reddit.com"
-
         const val OPTIN_OPTIONS = "%7B%22pref_quarantine_optin%22%3A%20true%2C%20%22pref_gated_sub_optin%22%3A%20true%7D"
     }
 }

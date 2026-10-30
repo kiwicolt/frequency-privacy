@@ -2,12 +2,14 @@ package app.relish.ui.login
 
 import android.annotation.SuppressLint
 import android.net.Uri
+import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,6 +34,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,7 +62,8 @@ class LoginViewModel @Inject constructor(
 ) : ViewModel() {
     val clientId = secureStore.clientId
     fun setClientId(id: String) = secureStore.setClientId(id)
-    fun loginUrl(): Result<String> = runCatching { repo.loginUrl() }
+    fun loginUrl(page: Int = 0): Result<String> = runCatching { repo.loginUrl(page) }
+    val pageCount = app.relish.data.remote.OAuthManager.AUTHORIZE_PAGES.size
     fun isRedirect(url: String) = repo.isOAuthRedirect(url)
 }
 
@@ -78,6 +83,7 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
     val busy by main.loginInProgress.collectAsStateWithLifecycle()
     val initialUser = remember { username }
     var embedded by remember { mutableStateOf(false) }
+    var page by remember { mutableIntStateOf(0) }
 
     // Pop once the login completes (either path).
     LaunchedEffect(username) { if (username != null && username != initialUser) nav.back() }
@@ -102,29 +108,37 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
                 clientId.isBlank() -> ClientIdSetup(onSave = vm::setClientId)
-                embedded -> {
-                    val url = remember(clientId) { vm.loginUrl().getOrNull() }
-                    if (url != null) {
-                        AndroidView(
-                            modifier = Modifier.fillMaxSize(),
-                            factory = { ctx ->
-                                WebView(ctx).apply {
-                                    settings.javaScriptEnabled = true
-                                    settings.domStorageEnabled = true
-                                    webViewClient = object : WebViewClient() {
-                                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                                            if (vm.isRedirect(request.url.toString())) {
-                                                main.completeLogin(request.url)
-                                                return true
+                embedded -> Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Login page ${page + 1} of ${vm.pageCount}", style = MetaTextStyle, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { page = (page + 1) % vm.pageCount }) { Text("Blank page? Try another") }
+                    }
+                    // Re-created per page so each attempt gets a fresh OAuth state and a clean load.
+                    key(page) {
+                        val url = remember(clientId, page) { vm.loginUrl(page).getOrNull() }
+                        if (url != null) {
+                            AndroidView(
+                                modifier = Modifier.fillMaxSize(),
+                                factory = { ctx ->
+                                    WebView(ctx).apply {
+                                        settings.javaScriptEnabled = true
+                                        settings.domStorageEnabled = true
+                                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                                        webViewClient = object : WebViewClient() {
+                                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                                                if (vm.isRedirect(request.url.toString())) {
+                                                    main.completeLogin(request.url)
+                                                    return true
+                                                }
+                                                return false
                                             }
-                                            return false
                                         }
+                                        loadUrl(url)
                                     }
-                                    loadUrl(url)
-                                }
-                            },
-                            onRelease = { it.destroy() },
-                        )
+                                },
+                                onRelease = { it.destroy() },
+                            )
+                        }
                     }
                 }
                 else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
