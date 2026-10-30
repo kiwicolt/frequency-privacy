@@ -43,7 +43,11 @@ class SecureStore @Inject constructor(@ApplicationContext context: Context) {
     /** Logged-in Reddit username, or null when browsing anonymously. */
     val username: StateFlow<String?> = _username.asStateFlow()
 
-    private val _clientId = MutableStateFlow(prefs.getString(KEY_CLIENT_ID, null)?.ifBlank { null } ?: BuildConfig.REDDIT_CLIENT_ID)
+    private val _clientId = MutableStateFlow(
+        prefs.getString(KEY_CLIENT_ID, null)
+            ?.takeUnless { it.isBlank() || it == DEAD_CLIENT_ID }
+            ?: BuildConfig.REDDIT_CLIENT_ID
+    )
     val clientId: StateFlow<String> = _clientId.asStateFlow()
 
     private val _sessionCookie = MutableStateFlow(prefs.getString(KEY_COOKIE, null).orEmpty())
@@ -126,6 +130,9 @@ class SecureStore @Inject constructor(@ApplicationContext context: Context) {
          * RIF client id works unchanged. Editable in Settings › Account for other app registrations.
          */
         const val DEFAULT_REDIRECT = "redditisfun://auth"
+
+        /** Shipped as the default in builds 3–8 but unknown to Reddit; ignored if still stored. */
+        private const val DEAD_CLIENT_ID = "96oTCRcyGdmvGQvHIk7MHQ"
         private const val KEY_CLIENT_ID = "client_id"
         private const val KEY_REDIRECT = "redirect_uri"
         private const val KEY_ACCESS = "access_token"

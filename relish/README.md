@@ -20,12 +20,11 @@ You need the Android SDK (compileSdk 35) and JDK 17. The app runs on minSdk 26 (
 
 * **Anonymous browsing works straight away.** It uses the web `.json` layer with the over18 cookie,
   so you don't need an account or an API key.
-* **To log in**, tap *Log in with Reddit* in the drawer. A client ID for an installed app is built
-  in (set it in `app/build.gradle.kts`, or override it with `-PredditClientId=…` or in
-  *Settings › Account*). The redirect URI defaults to `redditisfun://auth`, so a client ID registered for ReVanced
-  Reddit is Fun works as-is. You can change it in *Settings › Account › OAuth redirect URI* if your
-  app is registered with a different one. Logging in
-  unlocks voting, saving, replying, account subscriptions, multireddits, saved posts and the inbox.
+* **You need your own client ID.** Create an app of type **installed app** at
+  <https://www.reddit.com/prefs/apps> with the redirect URI `redditisfun://auth`, then paste its
+  client ID into the login screen or *Settings › Account*, or import it from a text file. You can
+  also build one in with `-PredditClientId=…`. Reddit now often blocks logged-out access from apps,
+  so logging in is required in practice.
 
 ## Hybrid network engine (NSFW handling)
 

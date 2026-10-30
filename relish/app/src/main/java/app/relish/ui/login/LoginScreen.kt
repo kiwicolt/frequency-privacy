@@ -71,7 +71,7 @@ class LoginViewModel @Inject constructor(
 
 /**
  * OAuth login. Defaults to the system browser (Custom Tab): Google/Apple sign-in and an existing
- * reddit.com session work there, and MainActivity receives the relish://oauth redirect. The
+ * reddit.com session work there, and MainActivity receives the OAuth redirect. The
  * embedded WebView (redirect intercepted directly) is offered as a fallback.
  */
 @SuppressLint("SetJavaScriptEnabled")
@@ -114,7 +114,7 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                clientId.isBlank() -> ClientIdSetup(onSave = vm::setClientId)
+                clientId.isBlank() -> ClientIdSetup(onSave = vm::setClientId, onImport = importClientId)
                 embedded -> Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Login page ${page + 1} of ${vm.pageCount}", style = MetaTextStyle, modifier = Modifier.weight(1f))
@@ -188,7 +188,7 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun ClientIdSetup(onSave: (String) -> Unit) {
+private fun ClientIdSetup(onSave: (String) -> Unit, onImport: () -> Unit) {
     var id by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text("One-time setup", style = MaterialTheme.typography.titleLarge)
@@ -197,10 +197,9 @@ private fun ClientIdSetup(onSave: (String) -> Unit) {
             "Reddit requires every client to use its own API key. This is free and takes a minute:\n\n" +
                 "1. Open reddit.com/prefs/apps (desktop site) while logged in.\n" +
                 "2. Click \"create another app…\" and choose the type \"installed app\".\n" +
-                "3. Set the redirect URI to exactly:  relish://oauth\n" +
+                "3. Set the redirect URI to exactly:  redditisfun://auth\n" +
                 "4. Copy the client id shown under the app name and paste it below.\n\n" +
-                "Anonymous NSFW browsing works without this (via the web JSON layer); logging in unlocks " +
-                "voting, saving, commenting, subscriptions, inbox and multireddits.",
+                "Reddit blocks logged-out access from apps, so Relish needs this to load anything.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(16.dp))
@@ -209,5 +208,6 @@ private fun ClientIdSetup(onSave: (String) -> Unit) {
         Text("Stored encrypted on this device only.", style = MetaTextStyle)
         Spacer(Modifier.height(12.dp))
         Button(onClick = { onSave(id) }, enabled = id.length >= 10) { Text("Save and continue") }
+        TextButton(onClick = onImport) { Text("Or import it from a file (e.g. reddit_client_id_revanced.txt)") }
     }
 }
