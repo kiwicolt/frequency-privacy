@@ -39,7 +39,8 @@ jobs:
       # Surface compiler/KSP errors at the end of the log, where they're easy to find.
       - name: Show build errors
         if: failure()
-        run: grep -E "^e: |^w: .*error|error:|FAILED" build.log | head -60 || true
+        run: |
+          grep -nE '^e: |Compilation error|FAILED' build.log | head -80 || true
 
       - name: Rename APKs
         run: |
