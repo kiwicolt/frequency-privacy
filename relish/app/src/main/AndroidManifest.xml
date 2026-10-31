@@ -5,13 +5,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
-        android:name=".RelishApp"
-        android:allowBackup="false"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="false"
+        android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Relish">
 
@@ -22,32 +19,24 @@
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
 
-            <!-- Filter 1: Launcher -->
+            <!-- Filter 1: Standard App Launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Filter 2: RIF OAuth Redirect -->
+            <!-- Filter 2: RedReader OAuth Redirect Callback -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:scheme="redditisfun"
-                    android:host="auth" />
-            </intent-filter>
-
-            <!-- Filter 3: Original Relish Redirect -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="relish"
-                    android:host="auth" />
+                    android:scheme="redreader"
+                    android:host="rr_oauth_redir" />
             </intent-filter>
 
         </activity>
+
     </application>
+
 </manifest>
