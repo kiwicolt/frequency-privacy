@@ -26,7 +26,7 @@ key in `app/relish-sideload.keystore`, so every new build installs over the prev
 * **Anonymous browsing works straight away.** It uses the web `.json` layer with the over18 cookie,
   so you don't need an account or an API key.
 * **You need your own client ID.** Create an app of type **installed app** at
-  <https://www.reddit.com/prefs/apps> with the redirect URI `redditisfun://auth`, then paste its
+  <https://www.reddit.com/prefs/apps> with the redirect URI `relish://auth`, then paste its
   client ID into the login screen or *Settings › Account*, or import it from a text file. You can
   also build one in with `-PredditClientId=…`. Reddit now often blocks logged-out access from apps,
   so logging in is required in practice.

@@ -126,10 +126,10 @@ class SecureStore @Inject constructor(@ApplicationContext context: Context) {
 
     companion object {
         /**
-         * Matches the redirect URI ReVanced has you register for Reddit is Fun, so an existing
-         * RIF client id works unchanged. Editable in Settings › Account for other app registrations.
+         * Default OAuth redirect URI. Register your Reddit app with this exact value. Editable in
+         * Settings › Account for an app registered with a different redirect URI.
          */
-        const val DEFAULT_REDIRECT = "redditisfun://auth"
+        const val DEFAULT_REDIRECT = "relish://auth"
 
         /** Shipped as the default in builds 3–8 but unknown to Reddit; ignored if still stored. */
         private const val DEAD_CLIENT_ID = "96oTCRcyGdmvGQvHIk7MHQ"
