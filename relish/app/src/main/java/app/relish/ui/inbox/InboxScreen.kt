@@ -43,6 +43,7 @@ import app.relish.ui.nav.LocalNavigator
 import app.relish.ui.theme.MetaTextStyle
 import app.relish.ui.theme.Relish
 import app.relish.util.timeAgo
+import app.relish.util.withMinDuration
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -80,7 +81,7 @@ class InboxViewModel @Inject constructor(private val repo: RedditRepository) : V
         val s = _state.value
         if (!reset && (s.after == null || s.loading)) return@launch
         _state.update { it.copy(loading = true, error = null) }
-        runCatching { repo.inbox(s.tab.where, if (reset) null else s.after) }
+        runCatching { withMinDuration(reset && s.items.isNotEmpty()) { repo.inbox(s.tab.where, if (reset) null else s.after) } }
             .onSuccess { page -> _state.update { it.copy(items = if (reset) page.items else it.items + page.items, after = page.after, loading = false) } }
             .onFailure { e -> _state.update { it.copy(loading = false, error = RedditRepository.friendlyError(e)) } }
     }

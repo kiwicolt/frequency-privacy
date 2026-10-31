@@ -14,6 +14,7 @@ import app.relish.data.prefs.PreferencesDataStore
 import app.relish.data.prefs.ThumbnailMode
 import app.relish.data.repo.RedditRepository
 import app.relish.util.Connectivity
+import app.relish.util.withMinDuration
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -158,7 +159,7 @@ class FeedViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             val s = state.value
             state.update { it.copy(loading = true, refreshing = refresh && reset, error = null) }
-            runCatching { repo.feed(s.source, s.sort, s.time, if (reset) null else s.after, refresh) }
+            runCatching { withMinDuration(refresh && reset) { repo.feed(s.source, s.sort, s.time, if (reset) null else s.after, refresh) } }
                 .onSuccess { page ->
                     state.update { cur ->
                         val merged = if (reset) page.items else (cur.items + page.items).distinctBy { it.key }

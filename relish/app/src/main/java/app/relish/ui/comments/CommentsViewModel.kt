@@ -11,6 +11,7 @@ import app.relish.data.model.Post
 import app.relish.data.model.VoteDir
 import app.relish.data.prefs.PreferencesDataStore
 import app.relish.data.repo.RedditRepository
+import app.relish.util.withMinDuration
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,7 +99,7 @@ class CommentsViewModel @Inject constructor(
 
     private fun load(refresh: Boolean) = viewModelScope.launch {
         state.update { it.copy(loading = it.post == null, refreshing = refresh, error = null) }
-        runCatching { repo.postWithComments(postId, state.value.sort, focus, refresh) }
+        runCatching { withMinDuration(refresh) { repo.postWithComments(postId, state.value.sort, focus, refresh) } }
             .onSuccess { res ->
                 state.update {
                     it.copy(post = res.post, nodes = res.comments, loading = false, refreshing = false, collapsed = emptySet(), expanded = emptySet())
