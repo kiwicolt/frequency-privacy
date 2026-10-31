@@ -21,10 +21,24 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
+
+            <!-- Filter 1: App Launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Filter 2: OAuth Redirect Handler -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="redditisfun"
+                    android:host="auth" />
+            </intent-filter>
+
+        </activity>
 
             <!-- OAuth redirect (relish://oauth) when the login is completed in an external browser. -->
             <intent-filter>
