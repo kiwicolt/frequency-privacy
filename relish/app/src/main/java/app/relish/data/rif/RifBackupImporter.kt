@@ -70,7 +70,7 @@ class RifBackupImporter @Inject constructor(
             if (!reddits.exists()) throw IllegalArgumentException("That doesn't look like a Reddit is Fun backup (no reddits.db)")
             val (subs, nsfw) = importSubscriptions(reddits)
             val shortcuts = importNsfwShortcuts(reddits)
-            val filters = File(dir, "threadfilters.db").takeIf { it.exists() }?.let(::importFilters) ?: 0
+            val filters = File(dir, "threadfilters.db").takeIf { it.exists() }?.let { importFilters(it) } ?: 0
             val reads = File(dir, "browserhistory.db").takeIf { it.exists() }?.let { importReadMarks(it) } ?: 0
             val settings = File(dir, "settings.xml").takeIf { it.exists() }?.let { importSettings(it) } ?: 0
             RifImportSummary(subs, nsfw, reads, filters, settings, shortcuts)
