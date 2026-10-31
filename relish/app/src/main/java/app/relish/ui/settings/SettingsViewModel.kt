@@ -17,11 +17,15 @@ import app.relish.data.prefs.ThumbnailMode
 import app.relish.data.repo.RedditRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import javax.inject.Inject
 
 @HiltViewModel
@@ -80,6 +84,49 @@ class SettingsViewModel @Inject constructor(
     // Behaviour
     fun setDefaultSort(v: Sort) = io { prefs.setDefaultSort(v) }
     fun setCommentSort(v: CommentSort) = io { prefs.setDefaultCommentSort(v) }
+    fun setInternalVideos(v: Boolean) = io { prefs.setInternalVideos(v) }
+    fun setInternalAlbums(v: Boolean) = io { prefs.setInternalAlbums(v) }
+    fun setBackGoesHome(v: Boolean) = io { prefs.setBackGoesHome(v) }
+    fun setQuitConfirmation(v: Boolean) = io { prefs.setQuitConfirmation(v) }
+    fun setAutoLoad(v: Boolean) = io { prefs.setAutoLoadNextPage(v) }
+    fun setKeepScreenOn(v: Boolean) = io { prefs.setKeepScreenOn(v) }
+    fun setLeftHanded(v: Boolean) = io { prefs.setLeftHanded(v) }
+    fun setShowLinkFlair(v: Boolean) = io { prefs.setShowLinkFlair(v) }
+    fun setShowCommentFlair(v: Boolean) = io { prefs.setShowCommentFlair(v) }
+    fun setGuideLines(v: Boolean) = io { prefs.setCommentGuideLines(v) }
+    fun setSortTabs(v: Set<Sort>) = io { if (v.isNotEmpty()) prefs.setVisibleSortTabs(v) }
+
+    // Reddit web preferences (account)
+    private val _accountPrefs = MutableStateFlow<JsonObject?>(null)
+    val accountPrefs: StateFlow<JsonObject?> = _accountPrefs.asStateFlow()
+    private val _accountPrefsError = MutableStateFlow<String?>(null)
+    val accountPrefsError: StateFlow<String?> = _accountPrefsError.asStateFlow()
+
+    fun loadAccountPrefs() = io {
+        _accountPrefsError.value = null
+        runCatching { repo.accountPrefs() }
+            .onSuccess { _accountPrefs.value = it }
+            .onFailure { _accountPrefsError.value = RedditRepository.friendlyError(it) }
+    }
+
+    fun setAccountPref(key: String, value: Boolean) = io {
+        val before = _accountPrefs.value
+        _accountPrefs.value = before?.let { JsonObject(it + (key to JsonPrimitive(value))) }
+        runCatching { repo.setAccountPref(key, value) }.onFailure {
+            _accountPrefs.value = before
+            _events.send(RedditRepository.friendlyError(it))
+        }
+    }
+
+    // Backup
+    suspend fun exportBackup(): String = repo.exportBackup()
+    fun importBackup(text: String) = io {
+        runCatching { repo.importBackup(text) }
+            .onSuccess { _events.send("Settings imported") }
+            .onFailure { _events.send(it.message ?: "Import failed") }
+    }
+    fun notify(message: String) = io { _events.send(message) }
+
     fun setCompressComments(v: Boolean) = io { prefs.setCompressComments(v) }
     fun setDemoMode(v: Boolean) = io { prefs.setDemoMode(v) }
     fun setStartup(v: String) = io { prefs.setStartupSubreddit(v) }

@@ -69,6 +69,8 @@ class CommentsViewModel @Inject constructor(
     val postId: String = checkNotNull(savedState.get<String>("postId")).removePrefix("t3_")
     private val focus: String? = savedState.get<String>("focus")?.removePrefix("t1_")
 
+    val settings = prefs.current
+
     private val state = MutableStateFlow(
         CommentsState(
             sort = prefs.current.value.defaultCommentSort,

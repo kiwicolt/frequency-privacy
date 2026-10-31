@@ -11,6 +11,7 @@ import app.relish.data.model.FeedSource
 import app.relish.data.model.Post
 import app.relish.data.model.PostMedia
 import app.relish.data.prefs.AppSettings
+import app.relish.ui.settings.SettingsSection
 import app.relish.util.MediaResolver
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -24,6 +25,7 @@ object Routes {
     const val WEB = "web?url={url}"
     const val LOGIN = "login"
     const val SETTINGS = "settings"
+    const val SETTINGS_SECTION = "settings/section/{section}"
     const val FILTERS = "settings/filters"
     const val INBOX = "inbox"
     const val SEARCH = "search?sub={sub}"
@@ -50,10 +52,17 @@ class AppNavigator(
     fun back() { nav.popBackStack() }
 
     fun openFeed(source: FeedSource) = nav.navigate(Routes.feed(source)) { launchSingleTop = true }
+    /** RIF "Back goes home": replace the whole stack with the homepage feed. */
+    fun goHome(home: FeedSource) = nav.navigate(Routes.feed(home)) {
+        popUpTo(0) { inclusive = true }
+        launchSingleTop = true
+    }
+
     fun openSubreddit(name: String) = openFeed(FeedSource.Subreddit(name))
     fun openUser(name: String) = openFeed(FeedSource.User(name))
     fun openComments(postId: String, focus: String? = null) = nav.navigate(Routes.comments(postId.removePrefix("t3_"), focus))
-    fun openSettings() = nav.navigate(Routes.SETTINGS) { launchSingleTop = true }
+    fun openSettings(section: SettingsSection? = null) =
+        nav.navigate(if (section == null) Routes.SETTINGS else "settings/section/${section.route}") { launchSingleTop = true }
     fun openFilters() = nav.navigate(Routes.FILTERS)
     fun openInbox() = nav.navigate(Routes.INBOX) { launchSingleTop = true }
     fun openSearch(sub: String?) = nav.navigate(Routes.search(sub))
@@ -66,7 +75,7 @@ class AppNavigator(
     fun openPostContent(post: Post) {
         when {
             post.isSelf -> openComments(post.id)
-            post.media.isViewable && settings().internalMediaViewer -> openMedia(post.media, post.title)
+            post.media.isViewable && opensInApp(post.media) -> openMedia(post.media, post.title)
             else -> openLink(post.url)
         }
     }
@@ -95,16 +104,25 @@ class AppNavigator(
         if (host == "youtube.com" || host == "m.youtube.com" || host == "youtu.be" || host == "music.youtube.com") {
             return openInBrowser(url)
         }
-        if (host == "v.redd.it" && segs.isNotEmpty() && settings().internalMediaViewer) {
+        if (host == "v.redd.it" && segs.isNotEmpty() && settings().internalVideos) {
             return openMedia(PostMedia.Video("https://v.redd.it/${segs[0]}/HLSPlaylist.m3u8"), "")
         }
 
         // Direct media links (i.redd.it, imgur, redgifs, .mp4 …) go to the viewer.
-        if (settings().internalMediaViewer) {
-            val media = MediaResolver.resolve(buildJsonObject { put("url", JsonPrimitive(url)) })
-            if (media.isViewable) return openMedia(media, "")
-        }
+        val media = MediaResolver.resolve(buildJsonObject { put("url", JsonPrimitive(url)) })
+        if (media.isViewable && opensInApp(media)) return openMedia(media, "")
         openExternalOrWeb(url)
+    }
+
+    /** RIF's per-type "In-app browser for images / videos / albums" switches. */
+    private fun opensInApp(media: PostMedia): Boolean {
+        val s = settings()
+        return when (media) {
+            is PostMedia.Image -> s.internalMediaViewer
+            is PostMedia.Video, is PostMedia.Audio, is PostMedia.Redgifs -> s.internalVideos
+            is PostMedia.Gallery -> s.internalAlbums
+            is PostMedia.Link, PostMedia.None -> false
+        }
     }
 
     fun openExternalOrWeb(url: String) {

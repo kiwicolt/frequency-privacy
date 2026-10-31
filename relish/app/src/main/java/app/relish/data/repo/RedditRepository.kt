@@ -51,10 +51,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import okhttp3.Cache
@@ -63,6 +66,27 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** The boolean account preferences RIF exposes under "reddit web preferences". */
+enum class AccountPref(val key: String, val label: String, val section: String, val summary: String? = null) {
+    OVER_18("over_18", "over 18", "content options", "I am over eighteen years old and willing to view adult content"),
+    LABEL_NSFW("label_nsfw", "label NSFW posts", "content options"),
+    SEARCH_NSFW("search_include_over_18", "include NSFW search results", "content options"),
+    NO_PROFANITY("no_profanity", "hide profanity", "content options"),
+    LINK_FLAIR("show_link_flair", "link flair", "display options"),
+    USER_FLAIR("show_flair", "user flair", "display options"),
+    SR_STYLES("show_stylesheets", "subreddit custom styles", "display options"),
+    THREADED_MESSAGES("threaded_messages", "threaded inbox messages", "messaging options"),
+    COLLAPSE_READ("collapse_read_messages", "collapse read messages", "messaging options"),
+    MARK_READ("mark_messages_read", "mark messages read", "messaging options", "when I open my inbox"),
+    MENTIONS("monitor_mentions", "notify mentions", "messaging options", "notify me when people say my username"),
+    HIDE_UPS("hide_ups", "hide upvoted links", "link options"),
+    HIDE_DOWNS("hide_downs", "hide downvoted links", "link options"),
+    PUBLIC_VOTES("public_votes", "make votes public", "privacy options"),
+    RESEARCH("research", "allow research", "privacy options", "allow my data to be used for research purposes"),
+    ROBOTS("hide_from_robots", "hide profile from robots", "privacy options", "don't allow search engines to index my user profile"),
+    PRESENCE("show_presence", "show presence", "privacy options", "let other users see my online status"),
+}
 
 class NotLoggedInException(action: String) : IllegalStateException("Log in to $action")
 
@@ -327,9 +351,14 @@ class RedditRepository @Inject constructor(
         else subscriptionDao.delete(clean)
     }
 
+    /** Drawer list: favourites first, then alphabetical; one row per subreddit. */
     fun subscriptions(): Flow<List<SubscriptionEntity>> = subscriptionDao.observeAll().map { rows ->
-        rows.distinctBy { it.name.lowercase() }
+        rows.groupBy { it.name.lowercase() }
+            .map { (_, dupes) -> dupes.first().copy(favorite = dupes.any { it.favorite }) }
+            .sortedWith(compareByDescending<SubscriptionEntity> { it.favorite }.thenBy { it.name.lowercase() })
     }
+
+    suspend fun setFavorite(name: String, favorite: Boolean) = subscriptionDao.setFavorite(name, favorite)
 
     // =========================================================================================
     // Local state: read marks, filters, history, shortcuts
@@ -360,6 +389,64 @@ class RedditRepository @Inject constructor(
         if (clean.isNotEmpty()) shortcutDao.upsert(NsfwShortcutEntity(clean, position = Int.MAX_VALUE / 2))
     }
     suspend fun removeNsfwShortcut(name: String) = shortcutDao.delete(name)
+
+    // =========================================================================================
+    // Backup (RIF: Settings › Backup). Never includes tokens, cookies or the client id.
+    // =========================================================================================
+
+    suspend fun exportBackup(): String = withContext(Dispatchers.IO) {
+        val root = buildJsonObject {
+            put("app", JsonPrimitive("relish"))
+            put("version", JsonPrimitive(1))
+            put("prefs", prefs.exportJson())
+            put("filters", JsonArray(filterDao.observeAll().first().map { f ->
+                buildJsonObject { put("type", JsonPrimitive(f.type.name)); put("value", JsonPrimitive(f.value)) }
+            }))
+            put("subscriptions", JsonArray(subscriptionDao.observeAll().first().filter { it.local || it.favorite }.map { s ->
+                buildJsonObject {
+                    put("name", JsonPrimitive(s.name)); put("local", JsonPrimitive(s.local))
+                    put("over18", JsonPrimitive(s.over18)); put("favorite", JsonPrimitive(s.favorite))
+                }
+            }))
+            put("nsfwShortcuts", JsonArray(shortcutDao.observeAll().first().map { JsonPrimitive(it.name) }))
+        }
+        root.toString()
+    }
+
+    suspend fun importBackup(text: String) = withContext(Dispatchers.IO) {
+        val root = kotlinx.serialization.json.Json.parseToJsonElement(text) as? JsonObject
+            ?: throw IllegalArgumentException("Not a Relish backup file")
+        if ((root["app"] as? JsonPrimitive)?.content != "relish") throw IllegalArgumentException("Not a Relish backup file")
+        (root["prefs"] as? JsonObject)?.let { prefs.importJson(it) }
+        (root["filters"] as? JsonArray)?.forEach { el ->
+            val o = el as? JsonObject ?: return@forEach
+            val type = runCatching { FilterType.valueOf((o["type"] as JsonPrimitive).content) }.getOrNull() ?: return@forEach
+            filterDao.insert(FilterEntity(type = type, value = (o["value"] as? JsonPrimitive)?.content ?: return@forEach))
+        }
+        (root["subscriptions"] as? JsonArray)?.forEach { el ->
+            val o = el as? JsonObject ?: return@forEach
+            val name = (o["name"] as? JsonPrimitive)?.content ?: return@forEach
+            fun b(k: String) = (o[k] as? JsonPrimitive)?.content == "true"
+            if (b("local")) subscriptionDao.upsert(SubscriptionEntity(name, local = true, over18 = b("over18"), favorite = b("favorite")))
+            else if (b("favorite")) subscriptionDao.setFavorite(name, true)
+        }
+        (root["nsfwShortcuts"] as? JsonArray)?.forEach { el -> (el as? JsonPrimitive)?.content?.let { addNsfwShortcut(it) } }
+    }
+
+    // =========================================================================================
+    // Reddit account web preferences (RIF: "reddit web preferences")
+    // =========================================================================================
+
+    suspend fun accountPrefs(): JsonObject =
+        if (demo) buildJsonObject {
+            AccountPref.entries.forEach { put(it.key, JsonPrimitive(it.key in setOf("over_18", "label_nsfw", "search_include_over_18"))) }
+        }
+        else (account("view account preferences") { getPrefs() } as? JsonObject) ?: JsonObject(emptyMap())
+
+    suspend fun setAccountPref(key: String, value: Boolean) {
+        if (demo) return
+        account("change account preferences") { updatePrefs(buildJsonObject { put(key, JsonPrimitive(value)) }) }
+    }
 
     suspend fun clearHttpCache() = withContext(Dispatchers.IO) { runCatching { httpCache.evictAll() } }
 

@@ -155,6 +155,9 @@ interface RedditApiService {
     @GET("api/v1/me")
     suspend fun me(): JsonElement
 
+    @GET("api/v1/me/prefs")
+    suspend fun getPrefs(): JsonElement
+
     /** Account-level content prefs. Used to flip `over_18`/`search_include_over_18` on at login. */
     @PATCH("api/v1/me/prefs")
     suspend fun updatePrefs(@Body prefs: JsonObject): JsonElement

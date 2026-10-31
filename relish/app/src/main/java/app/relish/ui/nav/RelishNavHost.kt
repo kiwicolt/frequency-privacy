@@ -7,7 +7,10 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +30,7 @@ import app.relish.ui.media.MediaViewerScreen
 import app.relish.ui.search.SearchScreen
 import app.relish.ui.settings.FilterScreen
 import app.relish.ui.settings.SettingsScreen
+import app.relish.ui.settings.SettingsSection
 import app.relish.ui.web.WebViewScreen
 
 /** Lets any screen post a global snackbar without plumbing a host through every Scaffold. */
@@ -41,6 +45,14 @@ fun RelishNavHost(main: MainViewModel) {
 
     LaunchedEffect(Unit) {
         main.messages.collect { snackbar.showSnackbar(it) }
+    }
+
+    // Settings › Appearance › Keep screen on.
+    val keepScreenOn = main.settings.collectAsState().value.keepScreenOn
+    val view = LocalView.current
+    DisposableEffect(keepScreenOn) {
+        view.keepScreenOn = keepScreenOn
+        onDispose { view.keepScreenOn = false }
     }
 
     val startSource = remember {
@@ -76,6 +88,10 @@ fun RelishNavHost(main: MainViewModel) {
                 }
                 composable(Routes.LOGIN) { LoginScreen(main) }
                 composable(Routes.SETTINGS) { SettingsScreen(main) }
+                composable(Routes.SETTINGS_SECTION, arguments = listOf(navArgument("section") { type = NavType.StringType })) { entry ->
+                    val route = entry.arguments?.getString("section")
+                    SettingsScreen(main, SettingsSection.entries.firstOrNull { it.route == route })
+                }
                 composable(Routes.FILTERS) { FilterScreen() }
                 composable(Routes.INBOX) { InboxScreen() }
                 composable(

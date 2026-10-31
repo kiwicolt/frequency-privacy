@@ -1,16 +1,19 @@
 package app.relish.ui.common
 
+import android.util.LruCache
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
@@ -32,18 +35,35 @@ fun HtmlText(
     maxLines: Int = Int.MAX_VALUE,
 ) {
     val linkColor = MaterialTheme.colorScheme.primary
+    val text = remember(html, fallback, linkColor) { HtmlCache.get(html, fallback, linkColor) }
     val currentOnClick by rememberUpdatedState(onLinkClick)
-    val text = remember(html, fallback, linkColor) {
-        if (html.isNullOrBlank()) AnnotatedString(fallback)
-        else runCatching {
+    // Links carry plain URL annotations (so parsed text can be cached and shared); taps arrive here.
+    val handler = remember { object : UriHandler { override fun openUri(uri: String) = currentOnClick(uri) } }
+    CompositionLocalProvider(LocalUriHandler provides handler) {
+        Text(text, modifier = modifier, style = style, color = color, maxLines = maxLines)
+    }
+}
+
+/**
+ * Parsed bodies, keyed by HTML + link colour. Parsing happens once per comment rather than every
+ * time a row scrolls back into view, which keeps comment threads smooth.
+ */
+private object HtmlCache {
+    private val cache = LruCache<String, AnnotatedString>(600)
+
+    fun get(html: String?, fallback: String, linkColor: Color): AnnotatedString {
+        if (html.isNullOrBlank()) return AnnotatedString(fallback)
+        val key = "${linkColor.value}|$html"
+        cache.get(key)?.let { return it }
+        val parsed = runCatching {
             AnnotatedString.fromHtml(
                 htmlString = prepare(html),
                 linkStyles = TextLinkStyles(style = SpanStyle(color = linkColor, textDecoration = TextDecoration.None)),
-                linkInteractionListener = { link -> (link as? LinkAnnotation.Url)?.url?.let { currentOnClick(it) } },
             ).trimEnd()
         }.getOrElse { AnnotatedString(fallback) }
+        cache.put(key, parsed)
+        return parsed
     }
-    Text(text, modifier = modifier, style = style, color = color, maxLines = maxLines)
 }
 
 /** Strips Reddit's wrapper and turns spoiler spans into a visible marker. */

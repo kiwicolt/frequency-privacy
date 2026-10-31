@@ -99,6 +99,8 @@ class FeedViewModel @Inject constructor(
                 largeCards = set.postLayout == app.relish.data.prefs.PostLayout.LARGE_CARDS,
                 inlinePreviews = set.inlinePreviewsInCards,
                 // Show "r/sub" when the feed mixes subreddits.
+                leftHanded = set.leftHanded,
+                showFlair = set.showLinkFlair,
                 showSubreddit = !(src is FeedSource.Subreddit && !src.name.contains('+') &&
                     !src.name.equals("all", true) && !src.name.equals("popular", true)),
             ),

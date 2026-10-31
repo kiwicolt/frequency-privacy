@@ -125,7 +125,9 @@ object AppModule {
 
     @Provides @Singleton
     fun database(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, "relish.db").build()
+        Room.databaseBuilder(context, AppDatabase::class.java, "relish.db")
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides fun readPostDao(db: AppDatabase) = db.readPosts()
     @Provides fun hiddenPostDao(db: AppDatabase) = db.hiddenPosts()

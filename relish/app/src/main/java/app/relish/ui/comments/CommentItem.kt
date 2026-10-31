@@ -62,8 +62,9 @@ data class CommentActions(
 )
 
 /** Draws one thin coloured bar per nesting level, then indents the content past them. */
-fun Modifier.depthBars(depth: Int, indent: Dp, colors: RelishColors): Modifier =
+fun Modifier.depthBars(depth: Int, indent: Dp, colors: RelishColors, visible: Boolean = true): Modifier =
     if (depth <= 0) this
+    else if (!visible) this.padding(start = indent * depth + 4.dp)
     else this
         .drawBehind {
             val step = indent.toPx()
@@ -90,6 +91,8 @@ fun CommentItem(
     hiddenChildren: Int,
     selected: Boolean,
     isOp: Boolean,
+    showFlair: Boolean = true,
+    guideLines: Boolean = true,
     onClick: () -> Unit,
     onToggleCollapse: () -> Unit,
     onLinkClick: (String) -> Unit,
@@ -106,11 +109,11 @@ fun CommentItem(
         Column(
             Modifier
                 .fillMaxWidth()
-                .depthBars(comment.depth, sp.depthIndent, colors)
+                .depthBars(comment.depth, sp.depthIndent, colors, guideLines)
                 .padding(end = sp.rowHorizontal, top = sp.commentVertical, bottom = sp.commentVertical)
                 .padding(start = if (comment.depth == 0) sp.rowHorizontal else 0.dp)
         ) {
-            CommentHeader(comment, collapsed, hiddenChildren, isOp, Modifier.clickable(onClick = onToggleCollapse))
+            CommentHeader(comment, collapsed, hiddenChildren, isOp, showFlair, Modifier.clickable(onClick = onToggleCollapse))
             if (!collapsed) {
                 Spacer(Modifier.height(2.dp))
                 HtmlText(
@@ -140,7 +143,7 @@ fun CommentItem(
 }
 
 @Composable
-private fun CommentHeader(comment: Comment, collapsed: Boolean, hiddenChildren: Int, isOp: Boolean, modifier: Modifier) {
+private fun CommentHeader(comment: Comment, collapsed: Boolean, hiddenChildren: Int, isOp: Boolean, showFlair: Boolean, modifier: Modifier) {
     val colors = Relish.colors
     val authorColor = when {
         comment.distinguished == "moderator" -> colors.mod
@@ -156,7 +159,7 @@ private fun CommentHeader(comment: Comment, collapsed: Boolean, hiddenChildren: 
     val text = buildAnnotatedString {
         withStyle(SpanStyle(color = authorColor, fontWeight = FontWeight.Bold)) { append(comment.author) }
         if (comment.isSubmitter) withStyle(SpanStyle(color = colors.op, fontWeight = FontWeight.Bold)) { append(" [OP]") }
-        comment.flair?.let { withStyle(SpanStyle(color = colors.subtle)) { append(" [$it]") } }
+        if (showFlair) comment.flair?.let { withStyle(SpanStyle(color = colors.subtle)) { append(" [$it]") } }
         append("  ")
         withStyle(SpanStyle(color = scoreColor, fontWeight = FontWeight.Bold)) {
             append(if (comment.scoreHidden) "[score hidden]" else "${compactCount(comment.score)} points")

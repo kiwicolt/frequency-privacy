@@ -16,6 +16,11 @@ cd relish
 
 You need the Android SDK (compileSdk 35) and JDK 17. The app runs on minSdk 26 (Android 8.0) and up.
 
+APKs are built by GitHub Actions on every push (`.github/workflows/relish-apk.yml`) and published as
+releases. Install `relish-N.apk`, the R8-optimised release build. `relish-N-debug.apk` installs
+alongside it, as `app.relish.debug`, for troubleshooting. Both are signed with the fixed sideload
+key in `app/relish-sideload.keystore`, so every new build installs over the previous one.
+
 ## First run
 
 * **Anonymous browsing works straight away.** It uses the web `.json` layer with the over18 cookie,

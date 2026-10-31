@@ -88,6 +88,7 @@ import app.relish.ui.theme.Relish
 @Composable
 fun CommentsScreen(vm: CommentsViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val appSettings by vm.settings.collectAsStateWithLifecycle()
     val nav = LocalNavigator.current
     val messenger = LocalMessenger.current
     val clipboard = LocalClipboardManager.current
@@ -196,6 +197,8 @@ fun CommentsScreen(vm: CommentsViewModel = hiltViewModel()) {
                                 hiddenChildren = row.hiddenChildren,
                                 selected = s.selected == node.fullname,
                                 isOp = node.author == post.author && node.author != "[deleted]",
+                                showFlair = appSettings.showCommentFlair,
+                                guideLines = appSettings.commentGuideLines,
                                 onClick = { vm.select(node.fullname) },
                                 onToggleCollapse = { vm.toggleCollapse(node.fullname) },
                                 onLinkClick = nav::openLink,

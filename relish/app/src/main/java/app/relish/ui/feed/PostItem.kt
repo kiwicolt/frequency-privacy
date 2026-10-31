@@ -108,6 +108,8 @@ data class PostDisplay(
     val largeCards: Boolean,
     val inlinePreviews: Boolean,
     val showSubreddit: Boolean,
+    val leftHanded: Boolean = false,
+    val showFlair: Boolean = true,
 )
 
 /**
@@ -162,9 +164,12 @@ private fun CompactRow(
         Modifier.fillMaxWidth().padding(end = sp.rowHorizontal, top = sp.rowVertical, bottom = sp.rowVertical),
         verticalAlignment = Alignment.Top,
     ) {
-        VoteColumn(post, actions)
+        val thumb: @Composable () -> Unit = {
+            if (!display.hideThumbnails) PostThumbnail(post, display, Modifier.size(sp.thumbnail + 8.dp), onContentClick)
+        }
+        if (display.leftHanded) { thumb(); if (!display.hideThumbnails) Spacer(Modifier.width(8.dp)) } else VoteColumn(post, actions)
         Column(Modifier.weight(1f).padding(top = 2.dp)) {
-            PostTitle(post, isRead, rifStyle = true)
+            PostTitle(post, isRead, rifStyle = true, showFlair = display.showFlair)
             Spacer(Modifier.height(4.dp))
             Text(
                 "${post.numComments} comments  ${post.subreddit}",
@@ -177,10 +182,7 @@ private fun CompactRow(
                 Text("${timeAgo(post.createdUtc)} by ${post.author}", style = MetaTextStyle, color = Relish.colors.subtle, maxLines = 1)
             }
         }
-        if (!display.hideThumbnails) {
-            Spacer(Modifier.width(8.dp))
-            PostThumbnail(post, display, Modifier.size(sp.thumbnail + 8.dp), onContentClick)
-        }
+        if (display.leftHanded) VoteColumn(post, actions) else { if (!display.hideThumbnails) Spacer(Modifier.width(8.dp)); thumb() }
     }
 }
 
@@ -270,7 +272,7 @@ private fun LargeCard(post: Post, isRead: Boolean, display: PostDisplay, onConte
 
 /** Bold title followed inline by the red NSFW pill, spoiler pill, flair and "(domain)". */
 @Composable
-fun PostTitle(post: Post, isRead: Boolean, maxLines: Int = Int.MAX_VALUE, rifStyle: Boolean = false) {
+fun PostTitle(post: Post, isRead: Boolean, maxLines: Int = Int.MAX_VALUE, rifStyle: Boolean = false, showFlair: Boolean = true) {
     val colors = Relish.colors
     val titleColor = when {
         post.stickied -> colors.stickied
@@ -281,7 +283,7 @@ fun PostTitle(post: Post, isRead: Boolean, maxLines: Int = Int.MAX_VALUE, rifSty
     }
     val text = buildAnnotatedString {
         if (post.stickied) { appendInlineContent(INLINE_PIN, "[pinned]"); append(" ") }
-        if (rifStyle) post.flair?.let {
+        if (rifStyle && showFlair) post.flair?.let {
             withStyle(SpanStyle(background = colors.flairBackground, color = colors.subtle, fontSize = 12.sp, fontWeight = FontWeight.Normal)) {
                 append("\u00A0$it\u00A0")
             }
@@ -295,7 +297,7 @@ fun PostTitle(post: Post, isRead: Boolean, maxLines: Int = Int.MAX_VALUE, rifSty
         ) { append(post.title) }
         if (post.over18) { append(" "); appendInlineContent(INLINE_NSFW, "[NSFW]") }
         if (post.spoiler) { append(" "); appendInlineContent(INLINE_SPOILER, "[spoiler]") }
-        if (!rifStyle) post.flair?.let {
+        if (!rifStyle && showFlair) post.flair?.let {
             append(" ")
             withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)) { append("[$it]") }
         }

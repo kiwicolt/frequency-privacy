@@ -1,6 +1,13 @@
 package app.relish.ui.feed
 
 import androidx.compose.foundation.background
+import app.relish.data.prefs.ThemeMode
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.AlertDialog
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,11 +92,28 @@ fun FeedScreen(main: MainViewModel, source: FeedSource, vm: FeedViewModel = hilt
     val listState = rememberLazyListState()
     val systemDark = isSystemInDarkTheme()
     val subscriptions by main.subscriptions.collectAsStateWithLifecycle()
+    val username by main.username.collectAsStateWithLifecycle()
+    val settings by main.settings.collectAsStateWithLifecycle()
+    var themeDialog by remember { mutableStateOf(false) }
+    var quitDialog by remember { mutableStateOf(false) }
+    val activity = LocalContext.current as? android.app.Activity
+    val isRoot = remember { nav.nav.previousBackStackEntry == null }
+    val home = remember(settings.startupSubreddit) {
+        settings.startupSubreddit.takeIf { it.isNotBlank() }?.let { FeedSource.Subreddit(it) } ?: FeedSource.FrontPage
+    }
+
+    // RIF "Back goes home" + "Quit confirmation" on the root screen.
+    BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
+    BackHandler(enabled = isRoot && !drawerState.isOpen && ((settings.backGoesHome && source != home) || settings.quitConfirmation)) {
+        if (settings.backGoesHome && source != home) nav.goHome(home)
+        else quitDialog = true
+    }
 
     LaunchedEffect(Unit) { vm.events.collect { messenger(it) } }
 
-    // Infinite scroll.
-    LaunchedEffect(listState) {
+    // Infinite scroll (RIF "Auto-load next page"; otherwise a button in the footer).
+    LaunchedEffect(listState, settings.autoLoadNextPage) {
+        if (!settings.autoLoadNextPage) return@LaunchedEffect
         snapshotFlow {
             val info = listState.layoutInfo
             (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 10
@@ -118,18 +142,30 @@ fun FeedScreen(main: MainViewModel, source: FeedSource, vm: FeedViewModel = hilt
                     isSubscribed = (source as? FeedSource.Subreddit)?.name?.let { name ->
                         subscriptions.any { it.name.equals(name, true) }
                     },
+                    username = username,
+                    demoMode = settings.demoMode,
+                    visibleTabs = settings.visibleSortTabs,
                     onMenu = { scope.launch { drawerState.open() } },
                     onSort = vm::setSort,
                     onRefresh = vm::refresh,
-                    onSearch = { nav.openSearch((source as? FeedSource.Subreddit)?.name) },
-                    onNightMode = { main.toggleNightMode(systemDark) },
-                    onSettings = { nav.openSettings() },
-                    onToggleSubscribe = { sub ->
-                        val name = (source as FeedSource.Subreddit).name
-                        main.setSubscribed(name, sub, ui.state.subreddit?.over18 ?: false)
+                    onAction = { action ->
+                        val subName = (source as? FeedSource.Subreddit)?.name
+                        when (action) {
+                            OverflowAction.PROFILE -> username?.let(nav::openUser)
+                            OverflowAction.SEARCH -> nav.openSearch(subName)
+                            OverflowAction.INBOX -> nav.openInbox()
+                            OverflowAction.SETTINGS -> nav.openSettings()
+                            OverflowAction.THEME -> themeDialog = true
+                            OverflowAction.BROWSER -> nav.openInBrowser(webUrl(source))
+                            OverflowAction.DEMO -> main.setDemoMode(!settings.demoMode)
+                            OverflowAction.LOGIN -> nav.openLogin()
+                            OverflowAction.LOGOUT -> main.logout()
+                            OverflowAction.SUBSCRIBE, OverflowAction.UNSUBSCRIBE ->
+                                subName?.let { main.setSubscribed(it, action == OverflowAction.SUBSCRIBE, ui.state.subreddit?.over18 ?: false) }
+                            OverflowAction.SHORTCUT -> subName?.let { main.addNsfwShortcut(it); messenger("Added to NSFW shortcuts") }
+                            OverflowAction.FILTER -> subName?.let { vm.filterSubreddit(it) }
+                        }
                     },
-                    onAddShortcut = { main.addNsfwShortcut((source as FeedSource.Subreddit).name); messenger("Added to NSFW shortcuts") },
-                    onFilterSub = { vm.filterSubreddit((source as FeedSource.Subreddit).name) },
                     scrollBehavior = null,
                 )
             },
@@ -151,7 +187,7 @@ fun FeedScreen(main: MainViewModel, source: FeedSource, vm: FeedViewModel = hilt
                                     display = ui.display,
                                     onClick = { vm.select(post.fullname) },
                                     onContentClick = { vm.markRead(post); nav.openPostContent(post) },
-                                    actions = postActions(post, vm, nav),
+                                    actions = remember(post, vm, nav) { postActions(post, vm, nav) },
                                 )
                             }
                             is FeedItem.CommentEntry -> UserCommentRow(
@@ -161,11 +197,51 @@ fun FeedScreen(main: MainViewModel, source: FeedSource, vm: FeedViewModel = hilt
                             )
                         }
                     }
-                    item(key = "footer") { FeedFooter(ui, onRetry = vm::retry) }
+                    item(key = "footer") { FeedFooter(ui, onRetry = vm::retry, onLoadMore = if (settings.autoLoadNextPage) null else vm::loadMore) }
                 }
             }
         }
     }
+
+    if (themeDialog) {
+        AlertDialog(
+            onDismissRequest = { themeDialog = false },
+            title = { Text("Theme") },
+            text = {
+                Column {
+                    ThemeMode.entries.forEach { mode ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { main.setTheme(mode); themeDialog = false }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = settings.theme == mode, onClick = null)
+                            Text("  ${mode.label}")
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { themeDialog = false }) { Text("Close") } },
+        )
+    }
+    if (quitDialog) {
+        AlertDialog(
+            onDismissRequest = { quitDialog = false },
+            title = { Text("Quit Relish?") },
+            confirmButton = { TextButton(onClick = { quitDialog = false; activity?.finish() }) { Text("Quit") } },
+            dismissButton = { TextButton(onClick = { quitDialog = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+enum class OverflowAction { PROFILE, SEARCH, INBOX, SETTINGS, THEME, BROWSER, DEMO, LOGIN, LOGOUT, SUBSCRIBE, UNSUBSCRIBE, SHORTCUT, FILTER }
+
+private fun webUrl(source: FeedSource): String = "https://www.reddit.com/" + when (source) {
+    FeedSource.FrontPage -> ""
+    is FeedSource.Subreddit -> "r/${source.name}/"
+    is FeedSource.Multi -> "user/${source.owner}/m/${source.name}/"
+    is FeedSource.User -> "user/${source.name}/"
+    is FeedSource.Saved -> "user/${source.user}/saved/"
+    is FeedSource.Search -> "search/?q=" + android.net.Uri.encode(source.query)
 }
 
 private fun postActions(post: Post, vm: FeedViewModel, nav: app.relish.ui.nav.AppNavigator) = PostActions(
@@ -181,7 +257,7 @@ private fun postActions(post: Post, vm: FeedViewModel, nav: app.relish.ui.nav.Ap
 )
 
 @Composable
-private fun FeedFooter(ui: FeedUi, onRetry: () -> Unit) {
+private fun FeedFooter(ui: FeedUi, onRetry: () -> Unit, onLoadMore: (() -> Unit)?) {
     Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
         when {
             ui.state.error != null -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -191,6 +267,7 @@ private fun FeedFooter(ui: FeedUi, onRetry: () -> Unit) {
             ui.state.loading && !ui.state.refreshing -> CircularProgressIndicator(Modifier.padding(8.dp))
             ui.state.endReached && ui.visible.isEmpty() -> Text("Nothing here", color = Relish.colors.subtle)
             ui.state.endReached -> Text("End of listing", color = Relish.colors.subtle, style = MetaTextStyle)
+            onLoadMore != null && ui.state.items.isNotEmpty() -> TextButton(onClick = onLoadMore) { Text("Load more") }
         }
     }
 }
@@ -202,15 +279,13 @@ private fun FeedTopBar(
     sort: Sort,
     time: TimeFilter,
     isSubscribed: Boolean?,
+    username: String?,
+    demoMode: Boolean,
+    visibleTabs: Set<Sort>,
     onMenu: () -> Unit,
     onSort: (Sort, TimeFilter?) -> Unit,
     onRefresh: () -> Unit,
-    onSearch: () -> Unit,
-    onNightMode: () -> Unit,
-    onSettings: () -> Unit,
-    onToggleSubscribe: (Boolean) -> Unit,
-    onAddShortcut: () -> Unit,
-    onFilterSub: () -> Unit,
+    onAction: (OverflowAction) -> Unit,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior?,
 ) {
     var timeMenuFor by remember { mutableStateOf<Sort?>(null) }
@@ -240,41 +315,30 @@ private fun FeedTopBar(
             Box {
                 IconButton(onClick = { overflow = true }) { Icon(Icons.Default.MoreVert, "More") }
                 DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Search") }, leadingIcon = { Icon(Icons.Default.Search, null) },
-                        onClick = { overflow = false; onSearch() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Night mode") }, leadingIcon = { Icon(Icons.Default.DarkMode, null) },
-                        onClick = { overflow = false; onNightMode() },
-                    )
+                    @Composable
+                    fun Item(label: String, action: OverflowAction) =
+                        DropdownMenuItem(text = { Text(label) }, onClick = { overflow = false; onAction(action) })
+                    if (username != null) Item("$username's profile", OverflowAction.PROFILE)
+                    Item("Search posts", OverflowAction.SEARCH)
+                    if (username != null || demoMode) Item("Inbox", OverflowAction.INBOX)
                     if (isSubscribed != null) {
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text(if (isSubscribed) "Unsubscribe" else "Subscribe") },
-                            leadingIcon = { Icon(if (isSubscribed) Icons.Default.RemoveCircleOutline else Icons.Default.Add, null) },
-                            onClick = { overflow = false; onToggleSubscribe(!isSubscribed) },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Add to NSFW shortcuts") }, leadingIcon = { Icon(Icons.Default.Whatshot, null) },
-                            onClick = { overflow = false; onAddShortcut() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Filter from r/all & front page") }, leadingIcon = { Icon(Icons.Default.FilterList, null) },
-                            onClick = { overflow = false; onFilterSub() },
-                        )
+                        Item(if (isSubscribed) "Unsubscribe" else "Subscribe", if (isSubscribed) OverflowAction.UNSUBSCRIBE else OverflowAction.SUBSCRIBE)
+                        Item("Add to NSFW shortcuts", OverflowAction.SHORTCUT)
+                        Item("Filter from front page & r/all", OverflowAction.FILTER)
                     }
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text("Settings") }, leadingIcon = { Icon(Icons.Default.Settings, null) },
-                        onClick = { overflow = false; onSettings() },
-                    )
+                    Item("Settings", OverflowAction.SETTINGS)
+                    Item("Theme", OverflowAction.THEME)
+                    Item("reddit in browser", OverflowAction.BROWSER)
+                    Item(if (demoMode) "Exit demo mode" else "Demo mode", OverflowAction.DEMO)
+                    if (username != null) Item("Logout: $username", OverflowAction.LOGOUT) else Item("Log in", OverflowAction.LOGIN)
                 }
             }
         },
     )
     if (source.supportsSort) {
-        val tabs = remember(source) { Sort.entries.filter { it != Sort.BEST || source == FeedSource.FrontPage } }
+        val tabs = remember(source, visibleTabs) {
+            Sort.entries.filter { (it in visibleTabs || it == sort) && (it != Sort.BEST || source == FeedSource.FrontPage) }
+        }
         Box {
             PrimaryScrollableTabRow(
                 selectedTabIndex = tabs.indexOf(sort).coerceAtLeast(0),

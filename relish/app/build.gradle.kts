@@ -24,13 +24,27 @@ android {
         buildConfigField("String", "REDDIT_CLIENT_ID", "\"$clientId\"")
     }
 
+    // Fixed key for personal sideloading so each new build installs over the previous one.
+    // Not a secret: it only identifies "builds of this repo" to Android's package manager.
+    signingConfigs {
+        create("sideload") {
+            storeFile = file("relish-sideload.keystore")
+            storePassword = "relish-sideload"
+            keyAlias = "relish"
+            keyPassword = "relish-sideload"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("sideload")
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Personal sideload build: signs with the debug key so `assembleRelease` installs directly.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("sideload")
         }
     }
     compileOptions {
@@ -63,6 +77,8 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.browser)
+    // Installs the Compose/AndroidX baseline profiles on sideloaded installs: smoother scrolling from first launch.
+    implementation(libs.androidx.profileinstaller)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

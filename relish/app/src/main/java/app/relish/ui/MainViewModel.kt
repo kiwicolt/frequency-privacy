@@ -84,12 +84,21 @@ class MainViewModel @Inject constructor(
         _messages.send(if (on) "Demo mode on: showing offline sample content" else "Demo mode off")
     }
 
+    fun setTheme(mode: app.relish.data.prefs.ThemeMode) = viewModelScope.launch { prefs.setTheme(mode) }
+
     fun toggleNightMode(systemDark: Boolean) = viewModelScope.launch { prefs.toggleNightMode(systemDark) }
 
     fun setSubscribed(name: String, subscribed: Boolean, over18: Boolean = false) = viewModelScope.launch {
         runCatching { repo.setSubscribed(name, subscribed, over18) }
             .onSuccess { _messages.send(if (subscribed) "Subscribed to r/$name" else "Unsubscribed from r/$name") }
             .onFailure { _messages.send(RedditRepository.friendlyError(it)) }
+    }
+
+    fun setFavorite(name: String, favorite: Boolean) = viewModelScope.launch { repo.setFavorite(name, favorite) }
+
+    fun filterSubreddit(name: String) = viewModelScope.launch {
+        repo.addFilter(app.relish.data.local.FilterType.SUBREDDIT, name)
+        _messages.send("r/$name filtered from front page & r/all")
     }
 
     fun addNsfwShortcut(name: String) = viewModelScope.launch { repo.addNsfwShortcut(name) }

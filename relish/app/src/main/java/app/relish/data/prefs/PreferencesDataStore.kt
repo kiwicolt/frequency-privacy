@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -22,6 +23,13 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -64,7 +72,13 @@ data class AppSettings(
     val postLayout: PostLayout = PostLayout.COMPACT_LIST,
     val autoMuteVideos: Boolean = true,
     val loopVideos: Boolean = true,
+    /** In-app viewer for images/GIFs (RIF: "In-app browser for images"). */
     val internalMediaViewer: Boolean = true,
+    /** In-app player for v.redd.it, mp4/webm, Redgifs, audio. */
+    val internalVideos: Boolean = true,
+    /** Native gallery/album viewer. */
+    val internalAlbums: Boolean = true,
+    /** In-app WebView for web links; off = "Prefer external browser". */
     val internalBrowser: Boolean = true,
     val inlinePreviewsInCards: Boolean = true,
     // Content filtering & NSFW
@@ -85,6 +99,18 @@ data class AppSettings(
     val demoMode: Boolean = false,
     /** RIF: show only top-level comments, with replies folded into "N more comments [+]". */
     val compressComments: Boolean = true,
+    // General (RIF)
+    val backGoesHome: Boolean = true,
+    val quitConfirmation: Boolean = true,
+    val autoLoadNextPage: Boolean = true,
+    // Appearance (RIF)
+    val keepScreenOn: Boolean = false,
+    /** Swap the vote column and thumbnail. */
+    val leftHanded: Boolean = false,
+    val showLinkFlair: Boolean = true,
+    val showCommentFlair: Boolean = true,
+    val commentGuideLines: Boolean = true,
+    val visibleSortTabs: Set<Sort> = Sort.entries.toSet(),
 ) {
     companion object {
         const val DEFAULT_ACCENT = 0xFFFF4500
@@ -141,6 +167,17 @@ class PreferencesDataStore @Inject constructor(
         val startup = stringPreferencesKey("startup_subreddit")
         val demo = booleanPreferencesKey("demo_mode")
         val compress = booleanPreferencesKey("compress_comments")
+        val internalVideos = booleanPreferencesKey("internal_videos")
+        val internalAlbums = booleanPreferencesKey("internal_albums")
+        val backGoesHome = booleanPreferencesKey("back_goes_home")
+        val quitConfirm = booleanPreferencesKey("quit_confirmation")
+        val autoLoad = booleanPreferencesKey("auto_load_next_page")
+        val keepScreenOn = booleanPreferencesKey("keep_screen_on")
+        val leftHanded = booleanPreferencesKey("left_handed")
+        val linkFlair = booleanPreferencesKey("show_link_flair")
+        val commentFlair = booleanPreferencesKey("show_comment_flair")
+        val guideLines = booleanPreferencesKey("comment_guide_lines")
+        val sortTabs = stringPreferencesKey("visible_sort_tabs")
     }
 
     val settings: Flow<AppSettings> = store.data
@@ -182,6 +219,18 @@ class PreferencesDataStore @Inject constructor(
             startupSubreddit = this[K.startup] ?: d.startupSubreddit,
             demoMode = this[K.demo] ?: d.demoMode,
             compressComments = this[K.compress] ?: d.compressComments,
+            internalVideos = this[K.internalVideos] ?: d.internalVideos,
+            internalAlbums = this[K.internalAlbums] ?: d.internalAlbums,
+            backGoesHome = this[K.backGoesHome] ?: d.backGoesHome,
+            quitConfirmation = this[K.quitConfirm] ?: d.quitConfirmation,
+            autoLoadNextPage = this[K.autoLoad] ?: d.autoLoadNextPage,
+            keepScreenOn = this[K.keepScreenOn] ?: d.keepScreenOn,
+            leftHanded = this[K.leftHanded] ?: d.leftHanded,
+            showLinkFlair = this[K.linkFlair] ?: d.showLinkFlair,
+            showCommentFlair = this[K.commentFlair] ?: d.showCommentFlair,
+            commentGuideLines = this[K.guideLines] ?: d.commentGuideLines,
+            visibleSortTabs = this[K.sortTabs]?.split(',')?.mapNotNull { n -> Sort.entries.firstOrNull { it.name == n } }?.toSet()
+                ?.takeIf { it.isNotEmpty() } ?: d.visibleSortTabs,
         )
     }
 
@@ -222,6 +271,45 @@ class PreferencesDataStore @Inject constructor(
     suspend fun setSaveSearchHistory(v: Boolean) = store.edit { it[K.searchHistory] = v }
     suspend fun setDefaultSort(v: Sort) = store.edit { it[K.defaultSort] = v.name }
     suspend fun setDefaultCommentSort(v: CommentSort) = store.edit { it[K.commentSort] = v.name }
+    suspend fun setInternalVideos(v: Boolean) = store.edit { it[K.internalVideos] = v }
+    suspend fun setInternalAlbums(v: Boolean) = store.edit { it[K.internalAlbums] = v }
+    suspend fun setBackGoesHome(v: Boolean) = store.edit { it[K.backGoesHome] = v }
+    suspend fun setQuitConfirmation(v: Boolean) = store.edit { it[K.quitConfirm] = v }
+    suspend fun setAutoLoadNextPage(v: Boolean) = store.edit { it[K.autoLoad] = v }
+    suspend fun setKeepScreenOn(v: Boolean) = store.edit { it[K.keepScreenOn] = v }
+    suspend fun setLeftHanded(v: Boolean) = store.edit { it[K.leftHanded] = v }
+    suspend fun setShowLinkFlair(v: Boolean) = store.edit { it[K.linkFlair] = v }
+    suspend fun setShowCommentFlair(v: Boolean) = store.edit { it[K.commentFlair] = v }
+    suspend fun setCommentGuideLines(v: Boolean) = store.edit { it[K.guideLines] = v }
+    suspend fun setVisibleSortTabs(v: Set<Sort>) = store.edit { it[K.sortTabs] = v.joinToString(",") { s -> s.name } }
+
+    /** Every stored preference as JSON (for Settings › Backup). Account data lives in SecureStore, not here. */
+    suspend fun exportJson(): JsonObject = buildJsonObject {
+        store.data.first().asMap().forEach { (key, value) ->
+            when (value) {
+                is Boolean -> put(key.name, buildJsonObject { put("t", "b"); put("v", value) })
+                is Long -> put(key.name, buildJsonObject { put("t", "l"); put("v", value) })
+                is Int -> put(key.name, buildJsonObject { put("t", "i"); put("v", value) })
+                is String -> put(key.name, buildJsonObject { put("t", "s"); put("v", value) })
+            }
+        }
+    }
+
+    /** Replaces all preferences with those from [exportJson]. Unknown types are skipped. */
+    suspend fun importJson(json: JsonObject) = store.edit { prefs ->
+        prefs.clear()
+        json.forEach { (name, el) ->
+            val o = el as? JsonObject ?: return@forEach
+            val v = o["v"] as? JsonPrimitive ?: return@forEach
+            when ((o["t"] as? JsonPrimitive)?.content) {
+                "b" -> v.booleanOrNull?.let { prefs[booleanPreferencesKey(name)] = it }
+                "l" -> v.longOrNull?.let { prefs[longPreferencesKey(name)] = it }
+                "i" -> v.intOrNull?.let { prefs[intPreferencesKey(name)] = it }
+                "s" -> prefs[stringPreferencesKey(name)] = v.content
+            }
+        }
+    }
+
     suspend fun setCompressComments(v: Boolean) = store.edit { it[K.compress] = v }
     suspend fun setDemoMode(v: Boolean) = store.edit { it[K.demo] = v }
     suspend fun setStartupSubreddit(v: String) = store.edit { it[K.startup] = v.trim().removePrefix("r/") }

@@ -1,5 +1,6 @@
 package app.relish.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -11,6 +12,8 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "read_posts")
@@ -42,6 +45,8 @@ data class SubscriptionEntity(
     val local: Boolean,
     val over18: Boolean = false,
     val iconUrl: String? = null,
+    /** RIF's star: favourites are listed first in the drawer. */
+    @ColumnInfo(defaultValue = "0") val favorite: Boolean = false,
 )
 
 @Entity(tableName = "nsfw_shortcuts")
@@ -116,16 +121,24 @@ abstract class SubscriptionDao {
     @Query("DELETE FROM subscriptions WHERE name = :name COLLATE NOCASE")
     abstract suspend fun delete(name: String)
 
+    @Query("UPDATE subscriptions SET favorite = :favorite WHERE name = :name COLLATE NOCASE")
+    abstract suspend fun setFavorite(name: String, favorite: Boolean)
+
+    @Query("SELECT name FROM subscriptions WHERE favorite = 1")
+    protected abstract suspend fun favoriteNames(): List<String>
+
     @Query("DELETE FROM subscriptions WHERE local = 0")
     protected abstract suspend fun clearAccount()
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     protected abstract suspend fun insertAll(items: List<SubscriptionEntity>)
 
+    /** Replaces the account-synced rows, keeping the user's stars. */
     @Transaction
     open suspend fun replaceAccount(items: List<SubscriptionEntity>) {
+        val stars = favoriteNames().map { it.lowercase() }.toSet()
         clearAccount()
-        insertAll(items)
+        insertAll(items.map { it.copy(favorite = it.name.lowercase() in stars) })
     }
 }
 
@@ -146,10 +159,18 @@ interface NsfwShortcutDao {
         ReadPostEntity::class, HiddenPostEntity::class, FilterEntity::class, SearchHistoryEntity::class,
         SubscriptionEntity::class, NsfwShortcutEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
+    companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE subscriptions ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+    }
+
     abstract fun readPosts(): ReadPostDao
     abstract fun hiddenPosts(): HiddenPostDao
     abstract fun filters(): FilterDao

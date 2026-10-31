@@ -1,5 +1,17 @@
 package app.relish.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Checkbox
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import app.relish.data.repo.AccountPref
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -75,24 +87,59 @@ private sealed interface SettingsDialog {
     data object DepthColors : SettingsDialog
 }
 
+/** RIF's settings categories; each opens its own screen. */
+enum class SettingsSection(val route: String, val title: String) {
+    GENERAL("general", "General settings"),
+    BROWSER("browser", "Browser"),
+    DATA("data", "Data usage"),
+    FILTERS("filters", "Content filters"),
+    HISTORY("history", "History"),
+    APPEARANCE("appearance", "Appearance"),
+    ACCOUNT("account", "Account"),
+    WEB_PREFS("webprefs", "reddit web preferences"),
+    BACKUP("backup", "Backup"),
+    ABOUT("about", "About"),
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(main: MainViewModel, vm: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(main: MainViewModel, section: SettingsSection? = null, vm: SettingsViewModel = hiltViewModel()) {
     val nav = LocalNavigator.current
     val messenger = LocalMessenger.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val s by vm.settings.collectAsStateWithLifecycle()
     val clientId by vm.clientId.collectAsStateWithLifecycle()
     val cookie by vm.sessionCookie.collectAsStateWithLifecycle()
     val redirect by vm.redirectUri.collectAsStateWithLifecycle()
     val filters by vm.filters.collectAsStateWithLifecycle()
     val username by main.username.collectAsStateWithLifecycle()
+    val accountPrefs by vm.accountPrefs.collectAsStateWithLifecycle()
+    val accountPrefsError by vm.accountPrefsError.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<SettingsDialog?>(null) }
+    var sortTabsDialog by remember { mutableStateOf(false) }
     val importClientId = rememberClientIdImporter { result ->
         result.onSuccess { vm.setClientId(it); messenger("Client id set to $it") }
             .onFailure { messenger(it.message ?: "Import failed") }
     }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            runCatching {
+                val text = vm.exportBackup()
+                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)!!.use { it.write(text.toByteArray()) } }
+            }.onSuccess { vm.notify("Settings exported") }.onFailure { vm.notify("Export failed: ${it.message}") }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)!!.use { it.readBytes().toString(Charsets.UTF_8) } }
+            }.onSuccess { vm.importBackup(it) }.onFailure { vm.notify("Couldn't read that file") }
+        }
+    }
 
     LaunchedEffect(Unit) { vm.events.collect { messenger(it) } }
+    LaunchedEffect(section, username) { if (section == SettingsSection.WEB_PREFS) vm.loadAccountPrefs() }
 
     fun <T> choice(title: String, options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
         dialog = SettingsDialog.Choice(title, options, label, selected, onPick)
@@ -100,131 +147,186 @@ fun SettingsScreen(main: MainViewModel, vm: SettingsViewModel = hiltViewModel())
 
     Scaffold(
         topBar = {
+            val colors = Relish.colors
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = colors.appBar,
+                    titleContentColor = colors.onAppBar,
+                    navigationIconContentColor = colors.onAppBar,
+                ),
                 navigationIcon = { IconButton(onClick = nav::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                title = { Text("Settings") },
+                title = {
+                    Column {
+                        Text(section?.title ?: "Relish settings")
+                        if (section == SettingsSection.WEB_PREFS && username != null) {
+                            Text("/u/$username", style = MaterialTheme.typography.labelMedium, color = colors.subtle)
+                        }
+                    }
+                },
             )
         },
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-            // ------------------------------------------------------------------ Account
-            item { Header("Account") }
-            item {
-                SwitchPref("Demo mode", "Offline sample posts (images, GIFs, videos, YouTube, galleries…) instead of Reddit",
-                    s.demoMode, vm::setDemoMode)
-            }
-            item {
-                if (username != null) {
-                    ClickPref("Logged in as u/$username", "Tap to log out") {
-                        dialog = SettingsDialog.Confirm("Log out?", "Tokens will be revoked and removed from this device.") { main.logout() }
+            when (section) {
+                null -> items(SettingsSection.entries) { sec ->
+                    Text(
+                        sec.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.fillMaxWidth().clickable { nav.openSettings(sec) }.padding(horizontal = 18.dp, vertical = 18.dp),
+                    )
+                }
+
+                SettingsSection.GENERAL -> {
+                    item {
+                        ClickPref("Homepage", s.startupSubreddit.ifBlank { "reddit front page" }) {
+                            dialog = SettingsDialog.TextInput("Homepage", s.startupSubreddit, "Blank = front page; a+b combos allowed", vm::setStartup)
+                        }
                     }
-                } else {
-                    ClickPref("Log in", "Required for voting, saving, replying, inbox and account subscriptions") { nav.openLogin() }
+                    item { SwitchPref("Back goes home", "Back button goes to homepage before quitting", s.backGoesHome, vm::setBackGoesHome) }
+                    item { SwitchPref("Quit confirmation", null, s.quitConfirmation, vm::setQuitConfirmation) }
+                    item { SwitchPref("Auto-load next page", null, s.autoLoadNextPage, vm::setAutoLoad) }
+                    item { ClickPref("Default sort", s.defaultSort.label) { choice("Default sort", Sort.entries, s.defaultSort, { it.label }, vm::setDefaultSort) } }
+                    item {
+                        ClickPref("Default comment sort", s.defaultCommentSort.label) {
+                            choice("Default comment sort", CommentSort.entries, s.defaultCommentSort, { it.label }, vm::setCommentSort)
+                        }
+                    }
                 }
-            }
-            item {
-                ClickPref("Reddit API client id", clientId.ifBlank { "Not set" }) {
-                    dialog = SettingsDialog.TextInput("Client id", clientId, "Installed-app client id", vm::setClientId)
-                }
-            }
-            item {
-                ClickPref("Import client id from file", "e.g. reddit_client_id_revanced.txt from ReVanced", onClick = importClientId)
-            }
-            item {
-                ClickPref("OAuth redirect URI", "$redirect (must match the Reddit app registration)") {
-                    dialog = SettingsDialog.TextInput("Redirect URI", redirect, "redditisfun://auth", vm::setRedirectUri)
-                }
-            }
-            item {
-                ClickPref("Browser session cookie", if (cookie.isBlank()) "Optional. Sent with web JSON requests" else "Set (${cookie.length} chars)") {
-                    dialog = SettingsDialog.TextInput("Cookie header", cookie, "reddit_session=…; token_v2=…", vm::setSessionCookie)
-                }
-            }
-            item {
-                ClickPref("Content routing", s.routing.label) {
-                    choice("Content routing", ContentRouting.entries, s.routing, { it.label }, vm::setRouting)
-                }
-            }
-            if (username != null) {
-                item { ClickPref("Enable NSFW on Reddit account", "Sets over_18 and NSFW search prefs so OAuth listings include NSFW", onClick = vm::enableAccountNsfw) }
-                item { ClickPref("Sync subscriptions", "Refresh the drawer from your account", onClick = vm::syncSubscriptions) }
-            }
 
-            // ------------------------------------------------------------------ Appearance
-            item { Header("Appearance") }
-            item { ClickPref("Theme", s.theme.label) { choice("Theme", ThemeMode.entries, s.theme, { it.label }, vm::setTheme) } }
-            item {
-                ClickPref("Accent colour", null, trailing = { Swatch(Color(s.accentColor)) }) { dialog = SettingsDialog.Accent }
-            }
-            item {
-                ClickPref("Comment depth colours", "${s.depthColors.size} levels", trailing = {
-                    Row { s.depthColors.take(6).forEach { Swatch(Color(it), 14) ; Spacer(Modifier.width(2.dp)) } }
-                }) { dialog = SettingsDialog.DepthColors }
-            }
-            item { ClickPref("Font size", s.fontSize.label) { choice("Font size", FontSize.entries, s.fontSize, { it.label }, vm::setFontSize) } }
-            item { SwitchPref("Compact mode", "Reduce padding to maximum density", s.compactMode, vm::setCompact) }
+                SettingsSection.BROWSER -> {
+                    item { SwitchPref("Prefer external browser", "Use a Custom Tab unless an \"in-app\" setting applies below", !s.internalBrowser) { vm.setInternalBrowser(!it) } }
+                    item { SwitchPref("In-app browser for images", "For images, GIF, GIFV", s.internalMediaViewer, vm::setInternalMedia) }
+                    item { SwitchPref("In-app browser for videos", "For v.redd.it, MP4, WebM, Redgifs, audio", s.internalVideos, vm::setInternalVideos) }
+                    item { SwitchPref("In-app native image albums", "For Reddit galleries", s.internalAlbums, vm::setInternalAlbums) }
+                    item { SwitchPref("Auto-mute videos", "Start videos muted", s.autoMuteVideos, vm::setAutoMute) }
+                    item { SwitchPref("Loop videos", null, s.loopVideos, vm::setLoop) }
+                    item { ClickPref("YouTube player", "YouTube app") {} }
+                }
 
-            // ------------------------------------------------------------------ Post layout & media
-            item { Header("Post layout & media") }
-            item { ClickPref("Thumbnails", s.thumbnails.label) { choice("Thumbnails", ThumbnailMode.entries, s.thumbnails, { it.label }, vm::setThumbnails) } }
-            item { ClickPref("Post layout", s.postLayout.label) { choice("Post layout", PostLayout.entries, s.postLayout, { it.label }, vm::setLayout) } }
-            item { SwitchPref("Image previews in cards", "Show large previews in card layout", s.inlinePreviewsInCards, vm::setInlinePreviews) }
-            item { SwitchPref("Auto-mute videos", "Start videos muted", s.autoMuteVideos, vm::setAutoMute) }
-            item { SwitchPref("Loop videos", null, s.loopVideos, vm::setLoop) }
-            item { SwitchPref("Internal media viewer", "Open images, GIFs, videos, albums and audio in-app", s.internalMediaViewer, vm::setInternalMedia) }
-            item { SwitchPref("Internal browser", "Open links in the in-app WebView instead of a Custom Tab", s.internalBrowser, vm::setInternalBrowser) }
+                SettingsSection.DATA -> {
+                    item { ClickPref("Thumbnails", s.thumbnails.label) { choice("Thumbnails", ThumbnailMode.entries, s.thumbnails, { it.label }, vm::setThumbnails) } }
+                    item { SwitchPref("Image previews in cards", "Large previews when using card layout", s.inlinePreviewsInCards, vm::setInlinePreviews) }
+                    item { ClickPref("Clear local cache", "Cached API responses and images", onClick = vm::clearCache) }
+                }
 
-            // ------------------------------------------------------------------ Content filtering & NSFW
-            item { Header("Content filtering & NSFW") }
-            item { SwitchPref("Show NSFW content", "Master switch for over-18 posts", s.showNsfw, vm::setShowNsfw) }
-            item { SwitchPref("Blur NSFW thumbnails", "Blur (Android 12+) or show a red NSFW placeholder", s.blurNsfw, vm::setBlurNsfw) }
-            item { SwitchPref("Skip age confirmation", "Send the over18 cookie so age-gated content loads directly", s.bypassAgePrompt, vm::setBypassAge) }
-            item { SwitchPref("Blur spoilers", null, s.blurSpoilers, vm::setBlurSpoilers) }
-            item {
-                ClickPref("Keyword & subreddit filters", if (filters.isEmpty()) "None" else "${filters.size} active") { nav.openFilters() }
-            }
+                SettingsSection.FILTERS -> {
+                    item { SwitchPref("Show NSFW content", "Master switch for over-18 posts", s.showNsfw, vm::setShowNsfw) }
+                    item { SwitchPref("Blur NSFW thumbnails", "Blur (Android 12+) or show a red NSFW placeholder", s.blurNsfw, vm::setBlurNsfw) }
+                    item { SwitchPref("Skip age confirmation", "Send the over18 cookie so age-gated content loads directly", s.bypassAgePrompt, vm::setBypassAge) }
+                    item { SwitchPref("Blur spoilers", null, s.blurSpoilers, vm::setBlurSpoilers) }
+                    item { ClickPref("Keyword, subreddit, user & domain filters", if (filters.isEmpty()) "None" else "${filters.size} active") { nav.openFilters() } }
+                }
 
-            // ------------------------------------------------------------------ Behaviour
-            item { Header("Behaviour") }
-            item { ClickPref("Default sort", s.defaultSort.label) { choice("Default sort", Sort.entries, s.defaultSort, { it.label }, vm::setDefaultSort) } }
-            item {
-                ClickPref("Default comment sort", s.defaultCommentSort.label) {
-                    choice("Default comment sort", CommentSort.entries, s.defaultCommentSort, { it.label }, vm::setCommentSort)
+                SettingsSection.HISTORY -> {
+                    item { SwitchPref("Mark read posts", "Dim posts you've opened; stored locally", s.markRead, vm::setMarkRead) }
+                    item { SwitchPref("Hide read posts", null, s.hideReadPosts, vm::setHideRead) }
+                    item { SwitchPref("Save search history", null, s.saveSearchHistory, vm::setSaveSearch) }
+                    item {
+                        ClickPref("Clear search history", null) {
+                            dialog = SettingsDialog.Confirm("Clear search history?", "This can't be undone.", vm::clearSearchHistory)
+                        }
+                    }
+                    item {
+                        ClickPref("Clear read & hidden history", null) {
+                            dialog = SettingsDialog.Confirm("Clear read history?", "Read marks and locally hidden posts will be forgotten.", vm::clearReadHistory)
+                        }
+                    }
+                }
+
+                SettingsSection.APPEARANCE -> {
+                    item { Header("General appearance") }
+                    item { ClickPref("Theme", s.theme.label) { choice("Theme", ThemeMode.entries, s.theme, { it.label }, vm::setTheme) } }
+                    item { ClickPref("Text size", s.fontSize.label) { choice("Text size", FontSize.entries, s.fontSize, { it.label }, vm::setFontSize) } }
+                    item { ClickPref("Accent colour", null, trailing = { Swatch(Color(s.accentColor)) }) { dialog = SettingsDialog.Accent } }
+                    item { SwitchPref("Compact mode", "Reduce padding to maximum density", s.compactMode, vm::setCompact) }
+                    item { Header("Screen") }
+                    item { SwitchPref("Keep screen on", "Prevent device from sleeping", s.keepScreenOn, vm::setKeepScreenOn) }
+                    item { Header("Display posts as cards") }
+                    item { SwitchPref("Cards", "Large cards instead of the compact list", s.postLayout == PostLayout.LARGE_CARDS) { vm.setLayout(if (it) PostLayout.LARGE_CARDS else PostLayout.COMPACT_LIST) } }
+                    item { Header("Posts appearance") }
+                    item { SwitchPref("Left handed mode", "Swap vote arrows and thumbnail", s.leftHanded, vm::setLeftHanded) }
+                    item { SwitchPref("Link flair", null, s.showLinkFlair, vm::setShowLinkFlair) }
+                    item { ClickPref("Show/hide sort tabs", s.visibleSortTabs.sortedBy { it.ordinal }.joinToString { it.label }) { sortTabsDialog = true } }
+                    item { Header("Comments appearance") }
+                    item { SwitchPref("Comment flair", null, s.showCommentFlair, vm::setShowCommentFlair) }
+                    item { SwitchPref("Comment guide lines", "Coloured depth bars", s.commentGuideLines, vm::setGuideLines) }
+                    item {
+                        ClickPref("Comment guide line colours", "${s.depthColors.size} levels", trailing = {
+                            Row { s.depthColors.take(6).forEach { Swatch(Color(it), 14); Spacer(Modifier.width(2.dp)) } }
+                        }) { dialog = SettingsDialog.DepthColors }
+                    }
+                    item { SwitchPref("Collapse child comments", "Show \"N more comments [+]\" under top-level comments", s.compressComments, vm::setCompressComments) }
+                }
+
+                SettingsSection.ACCOUNT -> {
+                    item {
+                        if (username != null) {
+                            ClickPref("Logout: $username", "Tokens are revoked and removed from this device") {
+                                dialog = SettingsDialog.Confirm("Log out?", "Tokens will be revoked and removed from this device.") { main.logout() }
+                            }
+                        } else {
+                            ClickPref("Log in", "Required for voting, saving, replying, inbox and subscriptions") { nav.openLogin() }
+                        }
+                    }
+                    item { SwitchPref("Demo mode", "Offline sample content instead of Reddit", s.demoMode) { main.setDemoMode(it) } }
+                    item {
+                        ClickPref("Reddit API client id", clientId.ifBlank { "Not set" }) {
+                            dialog = SettingsDialog.TextInput("Client id", clientId, "Installed-app client id", vm::setClientId)
+                        }
+                    }
+                    item { ClickPref("Import client id from file", "e.g. reddit_client_id_revanced.txt", onClick = importClientId) }
+                    item {
+                        ClickPref("OAuth redirect URI", "$redirect (must match the Reddit app registration)") {
+                            dialog = SettingsDialog.TextInput("Redirect URI", redirect, "redditisfun://auth", vm::setRedirectUri)
+                        }
+                    }
+                    item {
+                        ClickPref("Browser session cookie", if (cookie.isBlank()) "Optional. Sent with web JSON requests" else "Set (${cookie.length} chars)") {
+                            dialog = SettingsDialog.TextInput("Cookie header", cookie, "reddit_session=…", vm::setSessionCookie)
+                        }
+                    }
+                    item { ClickPref("Content routing", s.routing.label) { choice("Content routing", ContentRouting.entries, s.routing, { it.label }, vm::setRouting) } }
+                    if (username != null) {
+                        item { ClickPref("Sync subscriptions", "Refresh the drawer from your account", onClick = vm::syncSubscriptions) }
+                    }
+                }
+
+                SettingsSection.WEB_PREFS -> {
+                    val prefs = accountPrefs
+                    when {
+                        username == null && !s.demoMode -> item { Hint("Log in to view and change your Reddit account preferences.") }
+                        accountPrefsError != null -> item { Hint(accountPrefsError!!) }
+                        prefs == null -> item { Hint("Loading…") }
+                        else -> AccountPref.entries.groupBy { it.section }.forEach { (sectionName, list) ->
+                            item(key = "h-$sectionName") { Header(sectionName) }
+                            list.filter { prefs[it.key] is JsonPrimitive }.forEach { p ->
+                                item(key = p.key) {
+                                    val checked = (prefs[p.key] as? JsonPrimitive)?.booleanOrNull == true
+                                    SwitchPref(p.label, p.summary, checked) { vm.setAccountPref(p.key, it) }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                SettingsSection.BACKUP -> {
+                    item { ClickPref("Export settings", "Preferences, filters, local subscriptions, stars and shortcuts. No account info.") {
+                        exportLauncher.launch("relish-settings.json")
+                    } }
+                    item { ClickPref("Import settings", "WARNING: Will overwrite ALL settings") {
+                        dialog = SettingsDialog.Confirm("Import settings?", "This overwrites all current settings.") { importLauncher.launch(arrayOf("application/json", "*/*")) }
+                    } }
+                }
+
+                SettingsSection.ABOUT -> {
+                    item { ClickPref("Relish ${BuildConfig.VERSION_NAME}", "Personal, non-commercial Reddit client in the style of Reddit is Fun") {} }
                 }
             }
-            item {
-                SwitchPref("Collapse replies by default", "Show top-level comments with \"N more comments [+]\" like RIF",
-                    s.compressComments, vm::setCompressComments)
-            }
-            item {
-                ClickPref("Startup subreddit", s.startupSubreddit.ifBlank { "Front page" }) {
-                    dialog = SettingsDialog.TextInput("Startup subreddit", s.startupSubreddit, "Blank = front page; a+b combos allowed", vm::setStartup)
-                }
-            }
-
-            // ------------------------------------------------------------------ History & privacy
-            item { Header("History & privacy") }
-            item { SwitchPref("Mark read posts", "Dim posts you've opened; stored locally", s.markRead, vm::setMarkRead) }
-            item { SwitchPref("Hide read posts", null, s.hideReadPosts, vm::setHideRead) }
-            item { SwitchPref("Save search history", null, s.saveSearchHistory, vm::setSaveSearch) }
-            item {
-                ClickPref("Clear search history", null) {
-                    dialog = SettingsDialog.Confirm("Clear search history?", "This can't be undone.", vm::clearSearchHistory)
-                }
-            }
-            item {
-                ClickPref("Clear read & hidden history", null) {
-                    dialog = SettingsDialog.Confirm("Clear read history?", "Read marks and locally hidden posts will be forgotten.", vm::clearReadHistory)
-                }
-            }
-            item { ClickPref("Clear local cache", "Cached API responses and images", onClick = vm::clearCache) }
-
-            item { Header("About") }
-            item { ClickPref("Relish ${BuildConfig.VERSION_NAME}", "Personal, non-commercial Reddit client") {} }
             item { Spacer(Modifier.height(32.dp)) }
         }
     }
+
+    if (sortTabsDialog) SortTabsDialog(s.visibleSortTabs, onSave = { vm.setSortTabs(it); sortTabsDialog = false }) { sortTabsDialog = false }
 
     when (val d = dialog) {
         null -> Unit
@@ -242,6 +344,36 @@ fun SettingsScreen(main: MainViewModel, vm: SettingsViewModel = hiltViewModel())
             vm.setDepthColorsRaw(it); dialog = null
         }) { dialog = null }
     }
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(text, style = MetaTextStyle, color = Relish.colors.subtle, modifier = Modifier.padding(18.dp))
+}
+
+@Composable
+private fun SortTabsDialog(current: Set<Sort>, onSave: (Set<Sort>) -> Unit, onDismiss: () -> Unit) {
+    var picked by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Show/hide sort tabs") },
+        text = {
+            Column {
+                Sort.entries.forEach { sort ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { picked = if (sort in picked) picked - sort else picked + sort }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = sort in picked, onCheckedChange = null)
+                        Spacer(Modifier.width(12.dp))
+                        Text(sort.label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(picked) }, enabled = picked.isNotEmpty()) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
