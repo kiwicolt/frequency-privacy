@@ -194,6 +194,10 @@ fun SettingsScreen(main: MainViewModel, vm: SettingsViewModel = hiltViewModel())
                 }
             }
             item {
+                SwitchPref("Collapse replies by default", "Show top-level comments with \"N more comments [+]\" like RIF",
+                    s.compressComments, vm::setCompressComments)
+            }
+            item {
                 ClickPref("Startup subreddit", s.startupSubreddit.ifBlank { "Front page" }) {
                     dialog = SettingsDialog.TextInput("Startup subreddit", s.startupSubreddit, "Blank = front page; a+b combos allowed", vm::setStartup)
                 }

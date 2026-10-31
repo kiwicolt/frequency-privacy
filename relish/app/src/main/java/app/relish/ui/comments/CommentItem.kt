@@ -146,7 +146,7 @@ private fun CommentHeader(comment: Comment, collapsed: Boolean, hiddenChildren: 
         comment.distinguished == "moderator" -> colors.mod
         comment.distinguished == "admin" -> colors.nsfw
         isOp || comment.isSubmitter -> colors.op
-        else -> MaterialTheme.colorScheme.primary
+        else -> colors.subtle
     }
     val scoreColor = when (comment.vote) {
         VoteDir.UP -> colors.upvote
@@ -159,16 +159,41 @@ private fun CommentHeader(comment: Comment, collapsed: Boolean, hiddenChildren: 
         comment.flair?.let { withStyle(SpanStyle(color = colors.subtle)) { append(" [$it]") } }
         append("  ")
         withStyle(SpanStyle(color = scoreColor, fontWeight = FontWeight.Bold)) {
-            append(if (comment.scoreHidden) "[score hidden]" else "${compactCount(comment.score)} pts")
+            append(if (comment.scoreHidden) "[score hidden]" else "${compactCount(comment.score)} points")
         }
         withStyle(SpanStyle(color = colors.subtle)) {
-            append(" · ${timeAgo(comment.createdUtc)}")
+            append(" ${timeAgo(comment.createdUtc)}")
             if (comment.edited) append("*")
             if (comment.stickied) append(" · stickied")
         }
         if (collapsed) withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("  [+${hiddenChildren + 1}]") }
     }
     Text(text, style = MetaTextStyle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = modifier)
+}
+
+/** RIF's folded replies: "10 more comments [+]" under a top-level comment. */
+@Composable
+fun RepliesStubItem(count: Int, onClick: () -> Unit) {
+    val colors = Relish.colors
+    val sp = Relish.spacing
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = sp.rowHorizontal + 4.dp, top = 4.dp, bottom = 8.dp)
+                .drawBehind { drawRect(colors.voteArrow, size = Size(2.dp.toPx(), size.height)) }
+                .padding(start = 12.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if (count == 1) "1 more comment" else "$count more comments",
+                style = MaterialTheme.typography.bodyMedium,
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                color = colors.subtle,
+            )
+            Spacer(Modifier.width(12.dp))
+            Text("[+]", style = MaterialTheme.typography.bodyMedium, color = colors.subtle)
+        }
+        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+    }
 }
 
 @Composable

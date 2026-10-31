@@ -1,5 +1,6 @@
 package app.relish.ui.feed
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FilterList
@@ -30,6 +30,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -175,6 +177,7 @@ private fun postActions(post: Post, vm: FeedViewModel, nav: app.relish.ui.nav.Ap
     onHide = { vm.hide(post) },
     onSave = { vm.toggleSave(post) },
     onOpenLink = { vm.markRead(post); if (post.isSelf) nav.openComments(post.id) else nav.openLink(post.url) },
+    onUser = { nav.openUser(post.author) },
 )
 
 @Composable
@@ -210,51 +213,29 @@ private fun FeedTopBar(
     onFilterSub: () -> Unit,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior?,
 ) {
-    var sortMenu by remember { mutableStateOf(false) }
     var timeMenuFor by remember { mutableStateOf<Sort?>(null) }
     var overflow by remember { mutableStateOf(false) }
+    val colors = Relish.colors
 
+    Column(Modifier.background(colors.appBar)) {
     TopAppBar(
         scrollBehavior = scrollBehavior,
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = colors.appBar,
+            titleContentColor = colors.onAppBar,
+            navigationIconContentColor = colors.onAppBar,
+            actionIconContentColor = colors.onAppBar,
+        ),
         navigationIcon = { IconButton(onClick = onMenu) { Icon(Icons.Default.Menu, "Open drawer") } },
         title = {
             Column {
                 Text(source.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (source.supportsSort) {
-                    Text(
-                        sort.label + if (sort.hasTime) " · ${time.label}" else "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Relish.colors.subtle,
-                    )
+                if (source.supportsSort && sort.hasTime) {
+                    Text("${sort.label} · ${time.label}", style = MaterialTheme.typography.labelSmall, color = colors.subtle)
                 }
             }
         },
         actions = {
-            if (source.supportsSort) {
-                Box {
-                    IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Filled.Sort, "Sort") }
-                    DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                        Sort.entries.forEach { s ->
-                            DropdownMenuItem(
-                                text = { Text(s.label + if (s.hasTime) " ›" else "") },
-                                onClick = {
-                                    sortMenu = false
-                                    if (s.hasTime) timeMenuFor = s else onSort(s, null)
-                                },
-                            )
-                        }
-                    }
-                    DropdownMenu(expanded = timeMenuFor != null, onDismissRequest = { timeMenuFor = null }) {
-                        TimeFilter.entries.forEach { t ->
-                            DropdownMenuItem(
-                                text = { Text(t.label) },
-                                onClick = { timeMenuFor?.let { onSort(it, t) }; timeMenuFor = null },
-                            )
-                        }
-                    }
-                }
-            }
             IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh") }
             Box {
                 IconButton(onClick = { overflow = true }) { Icon(Icons.Default.MoreVert, "More") }
@@ -292,4 +273,35 @@ private fun FeedTopBar(
             }
         },
     )
+    if (source.supportsSort) {
+        val tabs = remember(source) { Sort.entries.filter { it != Sort.BEST || source == FeedSource.FrontPage } }
+        Box {
+            PrimaryScrollableTabRow(
+                selectedTabIndex = tabs.indexOf(sort).coerceAtLeast(0),
+                containerColor = colors.appBar,
+                contentColor = colors.onAppBar,
+                edgePadding = 0.dp,
+                divider = {},
+            ) {
+                tabs.forEach { s ->
+                    Tab(
+                        selected = s == sort,
+                        onClick = { if (s.hasTime) timeMenuFor = s else onSort(s, null) },
+                        selectedContentColor = colors.onAppBar,
+                        unselectedContentColor = colors.subtle,
+                        text = { Text(s.label.uppercase(), style = MaterialTheme.typography.titleSmall, maxLines = 1) },
+                    )
+                }
+            }
+            DropdownMenu(expanded = timeMenuFor != null, onDismissRequest = { timeMenuFor = null }) {
+                TimeFilter.entries.forEach { t ->
+                    DropdownMenuItem(
+                        text = { Text(t.label) },
+                        onClick = { timeMenuFor?.let { onSort(it, t) }; timeMenuFor = null },
+                    )
+                }
+            }
+        }
+    }
+    }
 }

@@ -83,6 +83,8 @@ data class AppSettings(
     val startupSubreddit: String = "",
     /** Offline sample content instead of Reddit (for trying the app without an API key). */
     val demoMode: Boolean = false,
+    /** RIF: show only top-level comments, with replies folded into "N more comments [+]". */
+    val compressComments: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_ACCENT = 0xFFFF4500
@@ -138,6 +140,7 @@ class PreferencesDataStore @Inject constructor(
         val commentSort = stringPreferencesKey("default_comment_sort")
         val startup = stringPreferencesKey("startup_subreddit")
         val demo = booleanPreferencesKey("demo_mode")
+        val compress = booleanPreferencesKey("compress_comments")
     }
 
     val settings: Flow<AppSettings> = store.data
@@ -178,6 +181,7 @@ class PreferencesDataStore @Inject constructor(
             defaultCommentSort = enumOr(this[K.commentSort], d.defaultCommentSort),
             startupSubreddit = this[K.startup] ?: d.startupSubreddit,
             demoMode = this[K.demo] ?: d.demoMode,
+            compressComments = this[K.compress] ?: d.compressComments,
         )
     }
 
@@ -218,6 +222,7 @@ class PreferencesDataStore @Inject constructor(
     suspend fun setSaveSearchHistory(v: Boolean) = store.edit { it[K.searchHistory] = v }
     suspend fun setDefaultSort(v: Sort) = store.edit { it[K.defaultSort] = v.name }
     suspend fun setDefaultCommentSort(v: CommentSort) = store.edit { it[K.commentSort] = v.name }
+    suspend fun setCompressComments(v: Boolean) = store.edit { it[K.compress] = v }
     suspend fun setDemoMode(v: Boolean) = store.edit { it[K.demo] = v }
     suspend fun setStartupSubreddit(v: String) = store.edit { it[K.startup] = v.trim().removePrefix("r/") }
 

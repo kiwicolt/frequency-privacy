@@ -115,7 +115,14 @@ class FeedViewModel @Inject constructor(
     fun init(source: FeedSource) {
         if (initialized) return
         initialized = true
-        state.value = FeedState(source = source, sort = settings.value.defaultSort)
+        // Front page opens on Best like RIF; Best only exists there, so elsewhere it means Hot.
+        val default = settings.value.defaultSort
+        val sort = when {
+            source == FeedSource.FrontPage && default == Sort.HOT -> Sort.BEST
+            source != FeedSource.FrontPage && default == Sort.BEST -> Sort.HOT
+            else -> default
+        }
+        state.value = FeedState(source = source, sort = sort)
         load(reset = true, refresh = false)
         if (source is FeedSource.Subreddit && !source.name.contains('+') && source.name.lowercase() !in setOf("all", "popular")) {
             viewModelScope.launch {

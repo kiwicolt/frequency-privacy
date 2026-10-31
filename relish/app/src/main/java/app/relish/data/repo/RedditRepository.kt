@@ -189,7 +189,7 @@ class RedditRepository @Inject constructor(
             }
             is FeedSource.Saved -> account("view saved items") { user(source.user, "saved", after = after, cacheControl = cache) }
             is FeedSource.Search -> {
-                val searchSort = if (sort == Sort.HOT) "relevance" else sort.path
+                val searchSort = if (sort == Sort.HOT || sort == Sort.BEST) "relevance" else sort.path
                 browse(isEmpty = emptyListing) {
                     if (source.subreddit != null) searchSubreddit(source.subreddit, source.query, sort = searchSort, time = t, after = after, cacheControl = cache)
                     else search(source.query, searchSort, t, after, cacheControl = cache)

@@ -121,3 +121,21 @@ class DemoDataTest {
         assertEquals(more.children.size, app.relish.data.demo.DemoData.moreChildren("img1", more).size)
     }
 }
+
+class CommentFoldingTest {
+    @Test
+    fun `compressed mode folds replies behind one stub per top-level comment`() {
+        val nodes = app.relish.data.demo.DemoData.postWithComments("img1").comments
+        val folded = app.relish.ui.comments.CommentsViewModel.visibleRows(nodes, emptySet(), expanded = emptySet())
+        // Only top-level comments and stubs (plus top-level "more" rows) remain.
+        assertTrue(folded.all { it.repliesStub || it.node.depth == 0 })
+        val stub = folded.first { it.repliesStub }
+        assertTrue(stub.hiddenChildren > 1)
+        // Expanding that comment reveals its replies.
+        val opened = app.relish.ui.comments.CommentsViewModel.visibleRows(nodes, emptySet(), expanded = setOf(stub.node.fullname))
+        assertTrue(opened.any { it.node.depth > 0 })
+        assertFalse(opened.any { it.repliesStub && it.node.fullname == stub.node.fullname })
+        // Keys stay unique for LazyColumn.
+        assertEquals(opened.size, opened.map { it.key }.toSet().size)
+    }
+}

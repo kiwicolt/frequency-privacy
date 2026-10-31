@@ -154,6 +154,8 @@ data class Message(
 data class PostWithComments(val post: Post, val comments: List<CommentNode>)
 
 enum class Sort(val path: String, val label: String, val hasTime: Boolean) {
+    /** Front page only; personalised ranking. */
+    BEST("best", "Best", false),
     HOT("hot", "Hot", false),
     NEW("new", "New", false),
     TOP("top", "Top", true),

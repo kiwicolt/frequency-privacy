@@ -19,15 +19,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.AlertDialog
@@ -70,6 +71,9 @@ import app.relish.data.model.VoteDir
 import app.relish.data.prefs.ThumbnailMode
 import app.relish.ui.common.HtmlText
 import app.relish.ui.feed.ActionIcon
+import app.relish.ui.feed.PostActions
+import app.relish.ui.feed.VoteColumn
+import app.relish.util.timeAgo
 import app.relish.ui.feed.PostDisplay
 import app.relish.ui.feed.PostMeta
 import app.relish.ui.feed.PostThumbnail
@@ -97,25 +101,25 @@ fun CommentsScreen(vm: CommentsViewModel = hiltViewModel()) {
 
     Scaffold(
         topBar = {
+            val colors = Relish.colors
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = colors.appBar,
+                    titleContentColor = colors.onAppBar,
+                    navigationIconContentColor = colors.onAppBar,
+                    actionIconContentColor = colors.onAppBar,
+                ),
                 navigationIcon = { IconButton(onClick = nav::back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 title = {
                     Column {
-                        Text(post?.let { "r/${it.subreddit}" } ?: "Comments", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            (post?.let { "${it.numComments} comments · " } ?: "") + s.sort.label,
-                            style = MaterialTheme.typography.labelSmall, color = Relish.colors.subtle,
-                        )
+                        Text(post?.title ?: "Comments", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        post?.let { Text("/r/${it.subreddit}", style = MaterialTheme.typography.labelMedium, color = colors.subtle) }
                     }
                 },
                 actions = {
-                    Box {
-                        IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Filled.Sort, "Sort comments") }
-                        DropdownMenu(sortMenu, onDismissRequest = { sortMenu = false }) {
-                            CommentSort.entries.forEach { c ->
-                                DropdownMenuItem(text = { Text(c.label) }, onClick = { sortMenu = false; vm.setSort(c) })
-                            }
+                    post?.let { p ->
+                        IconButton(onClick = { replyTarget = p.fullname to "Reply to post" }) {
+                            Icon(Icons.AutoMirrored.Filled.Comment, "Reply to post")
                         }
                     }
                     IconButton(onClick = vm::refresh) { Icon(Icons.Default.Refresh, "Refresh") }
@@ -123,6 +127,9 @@ fun CommentsScreen(vm: CommentsViewModel = hiltViewModel()) {
                         IconButton(onClick = { overflow = true }) { Icon(Icons.Default.MoreVert, "More") }
                         DropdownMenu(overflow, onDismissRequest = { overflow = false }) {
                             post?.let { p ->
+                                DropdownMenuItem(text = { Text(if (p.saved) "Unsave" else "Save") }, onClick = { overflow = false; vm.toggleSavePost() })
+                                DropdownMenuItem(text = { Text("Share link") }, onClick = { overflow = false; nav.share(p.title, if (p.isSelf) permalinkUrl(p.permalink) else p.url) })
+                                DropdownMenuItem(text = { Text("Open link") }, onClick = { overflow = false; nav.openPostContent(p) })
                                 DropdownMenuItem(text = { Text("Go to r/${p.subreddit}") }, onClick = { overflow = false; nav.openSubreddit(p.subreddit) })
                                 DropdownMenuItem(text = { Text("View u/${p.author}") }, onClick = { overflow = false; nav.openUser(p.author) })
                                 DropdownMenuItem(text = { Text("Share comments link") }, onClick = { overflow = false; nav.share(p.title, permalinkUrl(p.permalink)) })
@@ -144,13 +151,25 @@ fun CommentsScreen(vm: CommentsViewModel = hiltViewModel()) {
                     }
                 }
                 else -> LazyColumn(Modifier.fillMaxSize()) {
-                    item(key = "post") {
-                        PostHeader(
-                            post = post,
-                            onVote = vm::votePost,
-                            onSave = vm::toggleSavePost,
-                            onReply = { replyTarget = post.fullname to "Reply to post" },
-                        )
+                    item(key = "post") { PostHeader(post = post, onVote = vm::votePost) }
+                    item(key = "band") {
+                        Row(
+                            Modifier.fillMaxWidth().background(Relish.colors.flairBackground).padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${post.numComments} comments", style = MaterialTheme.typography.titleSmall)
+                                Text("sorted by ${s.sort.label.lowercase()}", style = MetaTextStyle, color = Relish.colors.subtle)
+                            }
+                            Box {
+                                IconButton(onClick = { sortMenu = true }) { Icon(Icons.Default.Settings, "Sort comments", tint = Relish.colors.subtle) }
+                                DropdownMenu(sortMenu, onDismissRequest = { sortMenu = false }) {
+                                    CommentSort.entries.forEach { c ->
+                                        DropdownMenuItem(text = { Text(c.label) }, onClick = { sortMenu = false; vm.setSort(c) })
+                                    }
+                                }
+                            }
+                        }
                     }
                     if (s.focusCommentId != null) {
                         item(key = "focus") {
@@ -167,9 +186,11 @@ fun CommentsScreen(vm: CommentsViewModel = hiltViewModel()) {
                     if (ui.rows.isEmpty()) {
                         item { Text("No comments yet", color = Relish.colors.subtle, modifier = Modifier.padding(16.dp)) }
                     }
-                    items(ui.rows, key = { r -> (r.node as? MoreComments)?.let { "more:${it.parentId}:${it.id}" } ?: r.node.fullname }) { row ->
+                    items(ui.rows, key = { it.key }) { row ->
                         when (val node = row.node) {
-                            is Comment -> CommentItem(
+                            is Comment -> if (row.repliesStub) {
+                                RepliesStubItem(row.hiddenChildren) { vm.expandReplies(node.fullname) }
+                            } else CommentItem(
                                 comment = node,
                                 collapsed = row.collapsed,
                                 hiddenChildren = row.hiddenChildren,
@@ -209,30 +230,29 @@ fun CommentsScreen(vm: CommentsViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun PostHeader(post: Post, onVote: (VoteDir) -> Unit, onSave: () -> Unit, onReply: () -> Unit) {
+private fun PostHeader(post: Post, onVote: (VoteDir) -> Unit) {
     val nav = LocalNavigator.current
-    val colors = Relish.colors
     val sp = Relish.spacing
     val display = PostDisplay(
         hideThumbnails = false, loadThumbnails = true, blurNsfw = false, blurSpoilers = false,
         largeCards = false, inlinePreviews = true, showSubreddit = true,
     )
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
-        Row(Modifier.padding(horizontal = sp.rowHorizontal, vertical = 10.dp)) {
-            if (!post.isSelf) {
-                PostThumbnail(post, display, Modifier.size(72.dp)) { nav.openPostContent(post) }
-                Spacer(Modifier.width(10.dp))
+    val votes = PostActions(
+        onUpvote = { onVote(VoteDir.UP) }, onDownvote = { onVote(VoteDir.DOWN) },
+        onSubreddit = {}, onComments = {}, onShare = {}, onHide = {}, onSave = {}, onOpenLink = {},
+    )
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(end = sp.rowHorizontal, top = 8.dp, bottom = 10.dp)) {
+            VoteColumn(post, votes)
+            Column(Modifier.weight(1f).padding(top = 2.dp).clickable { nav.openPostContent(post) }) {
+                PostTitle(post, isRead = false, rifStyle = true)
+                Spacer(Modifier.height(4.dp))
+                Text("posted to ${post.subreddit}", style = MetaTextStyle, color = Relish.colors.subtle)
+                Text("${timeAgo(post.createdUtc)} by ${post.author}", style = MetaTextStyle, color = Relish.colors.subtle)
             }
-            Column(Modifier.weight(1f)) {
-                PostTitle(post, isRead = false)
-                Spacer(Modifier.height(3.dp))
-                PostMeta(post, showSubreddit = true)
-                if (!post.isSelf) {
-                    Text(
-                        post.url, style = MetaTextStyle, color = MaterialTheme.colorScheme.primary, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp).clickable { nav.openPostContent(post) },
-                    )
-                }
+            if (!post.isSelf) {
+                Spacer(Modifier.width(8.dp))
+                PostThumbnail(post, display, Modifier.size(sp.thumbnail + 8.dp)) { nav.openPostContent(post) }
             }
         }
         if (post.selftext.isNotBlank()) {
@@ -240,28 +260,9 @@ private fun PostHeader(post: Post, onVote: (VoteDir) -> Unit, onSave: () -> Unit
                 html = post.selftextHtml,
                 fallback = post.selftext,
                 onLinkClick = nav::openLink,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = sp.rowHorizontal + 2.dp)
-                    .clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = sp.rowHorizontal + 4.dp, end = sp.rowHorizontal + 4.dp, bottom = 10.dp),
             )
-            Spacer(Modifier.height(8.dp))
         }
-        Row(
-            Modifier.fillMaxWidth().height(sp.actionHeight).background(colors.actionBar),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ActionIcon(Icons.Default.ArrowUpward, "Upvote", if (post.vote == VoteDir.UP) colors.upvote else null) { onVote(VoteDir.UP) }
-            ActionIcon(Icons.Default.ArrowDownward, "Downvote", if (post.vote == VoteDir.DOWN) colors.downvote else null) { onVote(VoteDir.DOWN) }
-            ActionIcon(Icons.AutoMirrored.Filled.Reply, "Reply", null, onReply)
-            ActionIcon(Icons.Default.Tag, "Subreddit", null) { nav.openSubreddit(post.subreddit) }
-            ActionIcon(Icons.Default.Share, "Share", null) { nav.share(post.title, if (post.isSelf) permalinkUrl(post.permalink) else post.url) }
-            ActionIcon(
-                if (post.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save",
-                if (post.saved) MaterialTheme.colorScheme.primary else null, onSave,
-            )
-            ActionIcon(Icons.AutoMirrored.Filled.OpenInNew, "Open link", null) { nav.openPostContent(post) }
-        }
-        HorizontalDivider()
     }
 }
 

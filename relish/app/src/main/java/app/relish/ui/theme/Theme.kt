@@ -32,6 +32,13 @@ data class RelishColors(
     val mod: Color = Color(0xFF4CAF50),
     val stickied: Color = Color(0xFF388E3C),
     val readTitle: Color = Color.Gray,
+    /** RIF link-blue titles (purple once visited) and light-blue header bar. */
+    val title: Color = Color(0xFF1A1AE6),
+    val titleRead: Color = Color(0xFF6A3DA8),
+    val appBar: Color = Color(0xFFCEE3F8),
+    val onAppBar: Color = Color(0xFF1A1A1A),
+    val flairBackground: Color = Color(0xFFE4E4E4),
+    val voteArrow: Color = Color(0xFFB0B0B0),
     val subtle: Color = Color.Gray,
     val actionBar: Color = Color(0x14000000),
     val selectedRow: Color = Color(0x0F000000),
@@ -89,6 +96,16 @@ fun RelishTheme(settings: AppSettings, content: @Composable () -> Unit) {
 
     val extra = RelishColors(
         readTitle = if (dark) Color(0xFF8A8A8A) else Color(0xFF8C8C8C),
+        title = if (dark) Color(0xFF8AB4F8) else Color(0xFF1A1AE6),
+        titleRead = if (dark) Color(0xFFB39DDB) else Color(0xFF6A3DA8),
+        appBar = when {
+            pureBlack -> Color.Black
+            dark -> Color(0xFF263238)
+            else -> Color(0xFFCEE3F8)
+        },
+        onAppBar = if (dark) Color(0xFFE6E6E6) else Color(0xFF1A1A1A),
+        flairBackground = if (dark) Color(0xFF3A3A3A) else Color(0xFFE4E4E4),
+        voteArrow = if (dark) Color(0xFF7A7A7A) else Color(0xFFB0B0B0),
         subtle = if (dark) Color(0xFF9E9E9E) else Color(0xFF6F6F6F),
         actionBar = if (dark) Color(0x22FFFFFF) else Color(0x12000000),
         selectedRow = if (dark) Color(0x14FFFFFF) else Color(0x0A000000),

@@ -25,6 +25,10 @@ import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Bookmark
@@ -42,7 +46,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -82,6 +94,7 @@ data class PostActions(
     val onHide: () -> Unit,
     val onSave: () -> Unit,
     val onOpenLink: () -> Unit,
+    val onUser: () -> Unit = {},
 )
 
 /** Display options derived from settings + connectivity, computed once per list. */
@@ -116,35 +129,86 @@ fun PostItem(
     Column(
         modifier
             .fillMaxWidth()
-            .background(if (selected) colors.selectedRow else Color.Transparent)
+            .background(
+                when {
+                    !selected -> Color.Transparent
+                    display.largeCards -> colors.selectedRow
+                    else -> colors.appBar.copy(alpha = 0.6f)
+                }
+            )
             .clickable(onClick = onClick)
     ) {
         if (display.largeCards) LargeCard(post, isRead, display, onContentClick)
-        else CompactRow(post, isRead, display, onContentClick)
+        else CompactRow(post, isRead, display, onContentClick, actions, selected)
 
         AnimatedVisibility(visible = selected, enter = expandVertically(), exit = shrinkVertically()) {
-            PostActionBar(post, actions)
+            if (display.largeCards) PostActionBar(post, actions) else RifActionBar(post, actions)
         }
         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
 @Composable
-private fun CompactRow(post: Post, isRead: Boolean, display: PostDisplay, onContentClick: () -> Unit) {
+private fun CompactRow(
+    post: Post,
+    isRead: Boolean,
+    display: PostDisplay,
+    onContentClick: () -> Unit,
+    actions: PostActions,
+    selected: Boolean,
+) {
     val sp = Relish.spacing
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = sp.rowHorizontal, vertical = sp.rowVertical),
+        Modifier.fillMaxWidth().padding(end = sp.rowHorizontal, top = sp.rowVertical, bottom = sp.rowVertical),
         verticalAlignment = Alignment.Top,
     ) {
+        VoteColumn(post, actions)
+        Column(Modifier.weight(1f).padding(top = 2.dp)) {
+            PostTitle(post, isRead, rifStyle = true)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "${post.numComments} comments  ${post.subreddit}",
+                style = MetaTextStyle,
+                color = Relish.colors.subtle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (selected) {
+                Text("${timeAgo(post.createdUtc)} by ${post.author}", style = MetaTextStyle, color = Relish.colors.subtle, maxLines = 1)
+            }
+        }
         if (!display.hideThumbnails) {
-            PostThumbnail(post, display, Modifier.size(sp.thumbnail), onContentClick)
             Spacer(Modifier.width(8.dp))
+            PostThumbnail(post, display, Modifier.size(sp.thumbnail + 8.dp), onContentClick)
         }
-        Column(Modifier.weight(1f)) {
-            PostTitle(post, isRead)
-            Spacer(Modifier.height(2.dp))
-            PostMeta(post, display.showSubreddit)
-        }
+    }
+}
+
+/** RIF's left column: up arrow, score, down arrow; tappable without opening the action bar. */
+@Composable
+fun VoteColumn(post: Post, actions: PostActions) {
+    val colors = Relish.colors
+    Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            Icons.Default.ArrowDropUp, "Upvote",
+            tint = if (post.vote == VoteDir.UP) colors.upvote else colors.voteArrow,
+            modifier = Modifier.size(32.dp).clickable(onClick = actions.onUpvote),
+        )
+        Text(
+            compactCount(post.score),
+            style = MetaTextStyle,
+            color = when (post.vote) {
+                VoteDir.UP -> colors.upvote
+                VoteDir.DOWN -> colors.downvote
+                VoteDir.NONE -> colors.subtle
+            },
+            maxLines = 1,
+        )
+        Icon(
+            Icons.Default.ArrowDropDown, "Downvote",
+            tint = if (post.vote == VoteDir.DOWN) colors.downvote else colors.voteArrow,
+            modifier = Modifier.size(32.dp).clickable(onClick = actions.onDownvote),
+        )
     }
 }
 
@@ -206,27 +270,40 @@ private fun LargeCard(post: Post, isRead: Boolean, display: PostDisplay, onConte
 
 /** Bold title followed inline by the red NSFW pill, spoiler pill, flair and "(domain)". */
 @Composable
-fun PostTitle(post: Post, isRead: Boolean, maxLines: Int = Int.MAX_VALUE) {
+fun PostTitle(post: Post, isRead: Boolean, maxLines: Int = Int.MAX_VALUE, rifStyle: Boolean = false) {
     val colors = Relish.colors
     val titleColor = when {
         post.stickied -> colors.stickied
+        rifStyle && isRead -> colors.titleRead
+        rifStyle -> colors.title
         isRead -> colors.readTitle
         else -> MaterialTheme.colorScheme.onSurface
     }
     val text = buildAnnotatedString {
         if (post.stickied) { appendInlineContent(INLINE_PIN, "[pinned]"); append(" ") }
-        withStyle(SpanStyle(fontWeight = if (isRead) FontWeight.Medium else FontWeight.Bold, color = titleColor)) { append(post.title) }
+        if (rifStyle) post.flair?.let {
+            withStyle(SpanStyle(background = colors.flairBackground, color = colors.subtle, fontSize = 12.sp, fontWeight = FontWeight.Normal)) {
+                append("\u00A0$it\u00A0")
+            }
+            append(" ")
+        }
+        withStyle(
+            SpanStyle(
+                fontWeight = if (rifStyle) FontWeight.Normal else if (isRead) FontWeight.Medium else FontWeight.Bold,
+                color = titleColor,
+            )
+        ) { append(post.title) }
         if (post.over18) { append(" "); appendInlineContent(INLINE_NSFW, "[NSFW]") }
         if (post.spoiler) { append(" "); appendInlineContent(INLINE_SPOILER, "[spoiler]") }
-        post.flair?.let {
+        if (!rifStyle) post.flair?.let {
             append(" ")
             withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)) { append("[$it]") }
         }
-        withStyle(SpanStyle(color = colors.subtle, fontSize = 11.sp, fontWeight = FontWeight.Normal)) { append(" (${post.domain})") }
+        withStyle(SpanStyle(color = colors.subtle, fontSize = if (rifStyle) 13.sp else 11.sp, fontWeight = FontWeight.Normal)) { append(" (${post.domain})") }
     }
     Text(
         text,
-        style = MaterialTheme.typography.titleSmall,
+        style = if (rifStyle) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleSmall,
         inlineContent = inlineBadges(),
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
@@ -296,9 +373,13 @@ fun PostThumbnail(post: Post, display: PostDisplay, modifier: Modifier, onClick:
         contentAlignment = Alignment.Center,
     ) {
         when {
-            post.isSelf && url == null -> Icon(Icons.AutoMirrored.Filled.Article, "Text post", tint = colors.subtle)
+            post.isSelf && url == null -> Icon(Icons.Default.PriorityHigh, "Text post", tint = colors.title.copy(alpha = 0.45f), modifier = Modifier.size(36.dp))
             !display.loadThumbnails -> Icon(mediaIcon(post.media), null, tint = colors.subtle)
-            url == null -> if (post.over18) ObscuredPlaceholder(post) else Icon(mediaIcon(post.media), null, tint = colors.subtle)
+            url == null -> when {
+                post.over18 -> ObscuredPlaceholder(post)
+                post.media is PostMedia.Link -> Icon(Icons.Default.QuestionMark, "Link", tint = colors.title.copy(alpha = 0.45f), modifier = Modifier.size(36.dp))
+                else -> Icon(mediaIcon(post.media), null, tint = colors.subtle)
+            }
             obscure && Build.VERSION.SDK_INT < 31 -> ObscuredPlaceholder(post)
             else -> {
                 AsyncImage(
@@ -350,6 +431,37 @@ private fun mediaIcon(media: PostMedia): ImageVector = when (media) {
     is PostMedia.Audio -> Icons.Default.Audiotrack
     is PostMedia.Link -> Icons.Default.Link
     PostMedia.None -> Icons.AutoMirrored.Filled.Article
+}
+
+/** RIF's text action bar under a selected row: share · save · hide · … · comments. */
+@Composable
+private fun RifActionBar(post: Post, actions: PostActions) {
+    val colors = Relish.colors
+    var more by remember { mutableStateOf(false) }
+    @Composable
+    fun Action(label: String, onClick: () -> Unit) {
+        TextButton(onClick = onClick, colors = ButtonDefaults.textButtonColors(contentColor = colors.onAppBar)) {
+            Text(label, style = MaterialTheme.typography.titleSmall)
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth().height(Relish.spacing.actionHeight + 6.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Action("share", actions.onShare)
+        Action(if (post.saved) "unsave" else "save", actions.onSave)
+        Action("hide", actions.onHide)
+        Box {
+            Action("…") { more = true }
+            DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                DropdownMenuItem(text = { Text("Open link") }, onClick = { more = false; actions.onOpenLink() })
+                DropdownMenuItem(text = { Text("Go to r/${post.subreddit}") }, onClick = { more = false; actions.onSubreddit() })
+                DropdownMenuItem(text = { Text("View u/${post.author}") }, onClick = { more = false; actions.onUser() })
+            }
+        }
+        Action("comments", actions.onComments)
+    }
 }
 
 /** RIF's signature inline bar: Upvote, Downvote, Subreddit, Comments, Share, Hide, Save, Open link. */
