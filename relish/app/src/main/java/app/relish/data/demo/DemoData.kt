@@ -263,17 +263,24 @@ object DemoData {
     private fun commentsFor(p: Post): List<CommentNode> {
         val out = mutableListOf<CommentNode>()
         out += c(p, "mod", 0, p.fullname, "relish_mod",
-            "<strong>Mod note:</strong> this is a stickied, distinguished moderator comment.", "Mod note", score = 1,
+            "<strong>Reminder:</strong> be civil and credit the original creator. Reposts will be removed.", "Reminder", score = 1,
             distinguished = "moderator", stickied = true, minutesAgo = 10)
 
         // A deep chain to show every depth colour.
         var parent = p.fullname
-        val voices = listOf("alice", "bob", p.author, "carol", "dave", "erin", "frank", "grace", "heidi")
-        voices.forEachIndexed { depth, who ->
-            val node = c(p, "chain$depth", depth, parent, who,
-                if (depth == 0) "Top comment. Tap me for actions, long-press (or tap my header) to collapse this whole thread of ${voices.size} replies."
-                else "Reply at depth $depth. Each level gets its own bar colour.",
-                "Reply at depth $depth", score = 900 - depth * 97, minutesAgo = 20L + depth * 4,
+        val thread = listOf(
+            "alice" to "This is genuinely one of the best shots I've seen on here in a while. Where was it taken?",
+            "bob" to "Looks like Preikestolen in Norway to me. The fjord gives it away.",
+            p.author to "Yep, Lysefjord! Hiked up at 4am to catch the sunrise. Worth every step.",
+            "carol" to "4am?! Respect. How long is the hike?",
+            "dave" to "About two hours each way at a normal pace. Steep in places but very doable.",
+            "erin" to "Went last summer. Go early or you'll be sharing the cliff with a hundred people.",
+            "frank" to "Can confirm, we got there at noon and it was a queue for photos.",
+            "grace" to "Noon in July is basically a theme park up there.",
+            "heidi" to "Adding this to the list. Thanks everyone!",
+        )
+        thread.forEachIndexed { depth, (who, text) ->
+            val node = c(p, "chain$depth", depth, parent, who, text, text, score = 900 - depth * 97, minutesAgo = 20L + depth * 4,
                 flair = if (depth == 2) "OP flair" else null)
             out += node
             parent = node.fullname
@@ -282,17 +289,17 @@ object DemoData {
             listOf("${p.id}_m1", "${p.id}_m2", "${p.id}_m3"))
 
         val rich = c(p, "rich", 0, p.fullname, "bob",
-            "Comments render formatting too: <em>italic</em>, <strong>bold</strong>, a <a href=\"https://picsum.photos/id/1035/1600/1000\">photo link</a>, " +
-                "a <a href=\"https://youtu.be/$YT_ID\">YouTube link</a> and a spoiler: <span class=\"md-spoiler-text\">hidden text</span>." +
-                "</p><blockquote><p>And a quote block.</p></blockquote><p>",
-            "Comments render formatting", score = 456, minutesAgo = 45, edited = true)
+            "Honestly the <em>colours</em> here are unreal. Reminds me of <a href=\"https://picsum.photos/id/1035/1600/1000\">this one</a> from last year. " +
+                "There's also a great <a href=\"https://youtu.be/$YT_ID\">video</a> of the hike. Spoiler for the view at the top: <span class=\"md-spoiler-text\">it's worth it</span>." +
+                "</p><blockquote><p>Go early or you'll be sharing the cliff</p></blockquote><p>This, a hundred times.",
+            "Honestly the colours here are unreal.", score = 456, minutesAgo = 45, edited = true)
         out += rich
-        out += c(p, "rich_r1", 1, rich.fullname, "carol", "Replying to the formatted comment.", "Replying", score = 12, minutesAgo = 40)
+        out += c(p, "rich_r1", 1, rich.fullname, "carol", "That video is great, thanks for sharing.", "That video is great", score = 12, minutesAgo = 40)
         out += MoreComments("_", "t1__", 2, "t1_${p.id}_rich_r1", 0, emptyList()) // "continue this thread"
 
-        out += c(p, "hidden", 0, p.fullname, "dave", "A fresh comment with its score hidden.", "Score hidden",
+        out += c(p, "hidden", 0, p.fullname, "dave", "Just got here. What a view.", "Just got here",
             scoreHidden = true, minutesAgo = 2)
-        out += c(p, "neg", 0, p.fullname, "erin", "An unpopular opinion with a negative score.", "Unpopular", score = -17, minutesAgo = 300)
+        out += c(p, "neg", 0, p.fullname, "erin", "Looks overprocessed to me, honestly.", "Looks overprocessed", score = -17, minutesAgo = 300)
         out += MoreComments("${p.id}_more_top", "t1_${p.id}_more_top", 0, p.fullname, 5,
             (1..5).map { "${p.id}_t$it" })
         return out
@@ -304,15 +311,23 @@ object DemoData {
         return more.children.mapIndexed { i, id ->
             Comment(
                 id = id, fullname = "t1_$id", depth = more.depth, parentId = more.parentId, linkId = p.fullname,
-                subreddit = p.subreddit, author = "loaded_user_${i + 1}",
-                body = "Loaded via \"load more\" (${i + 1} of ${more.children.size}).",
-                bodyHtml = md("Loaded via <em>load more</em> (${i + 1} of ${more.children.size})."),
+                subreddit = p.subreddit, author = listOf("ivan", "judy", "mallory", "niaj", "olivia")[i % 5],
+                body = LOADED_REPLIES[i % LOADED_REPLIES.size],
+                bodyHtml = md(LOADED_REPLIES[i % LOADED_REPLIES.size]),
                 score = 5 + i, scoreHidden = false, createdUtc = ago(15L + i), edited = false, isSubmitter = false,
                 distinguished = null, stickied = false, vote = VoteDir.NONE, saved = false,
                 permalink = "${p.permalink}$id/", flair = null,
             )
         }
     }
+
+    private val LOADED_REPLIES = listOf(
+        "Same here, we went in September and it was much quieter.",
+        "Is there a good place to stay nearby?",
+        "Stavanger is the closest city, about an hour away by ferry and bus.",
+        "Saving this thread for my trip next year.",
+        "The drone shots from up there are wild.",
+    )
 
     fun reply(parentFullname: String, text: String, depth: Int): Comment {
         val id = "demo_reply_${System.currentTimeMillis()}"

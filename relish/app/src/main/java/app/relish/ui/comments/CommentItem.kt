@@ -47,6 +47,7 @@ import app.relish.data.model.VoteDir
 import app.relish.ui.common.HtmlText
 import app.relish.ui.feed.ActionIcon
 import app.relish.ui.theme.MetaTextStyle
+import app.relish.ui.theme.RifBodyStyle
 import app.relish.ui.theme.Relish
 import app.relish.ui.theme.RelishColors
 import app.relish.util.compactCount
@@ -115,12 +116,12 @@ fun CommentItem(
         ) {
             CommentHeader(comment, collapsed, hiddenChildren, isOp, showFlair, Modifier.clickable(onClick = onToggleCollapse))
             if (!collapsed) {
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(1.dp))
                 HtmlText(
                     html = comment.bodyHtml,
                     fallback = comment.body,
                     onLinkClick = onLinkClick,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = RifBodyStyle,
                 )
             }
         }
@@ -138,7 +139,6 @@ fun CommentItem(
                 ActionIcon(Icons.Default.ContentCopy, "Copy", null, actions.onCopy)
             }
         }
-        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 

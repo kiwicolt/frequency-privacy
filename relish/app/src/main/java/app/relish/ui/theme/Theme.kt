@@ -50,11 +50,11 @@ data class RelishColors(
 /** Spacing that the Compact Mode preference tightens to RIF's maximum density. */
 @Immutable
 data class RelishSpacing(
-    val rowVertical: Dp = 8.dp,
+    val rowVertical: Dp = 6.dp,
     val rowHorizontal: Dp = 8.dp,
     val thumbnail: Dp = 64.dp,
     val actionHeight: Dp = 40.dp,
-    val commentVertical: Dp = 6.dp,
+    val commentVertical: Dp = 5.dp,
     val depthIndent: Dp = 8.dp,
 )
 
@@ -78,8 +78,14 @@ private val CompactTypography = Typography().let { t ->
     )
 }
 
-/** Small uppercase meta text used under titles ("1.2k pts · 34 comments …"). */
-val MetaTextStyle = TextStyle(fontSize = 12.sp, lineHeight = 15.sp)
+/** Meta text under titles ("37 comments  subreddit"). */
+val MetaTextStyle = TextStyle(fontSize = 13.sp, lineHeight = 16.sp)
+
+/** RIF's dense title: ~1.2x line spacing instead of Material's ~1.4x. */
+val RifTitleStyle = TextStyle(fontSize = 16.sp, lineHeight = 19.sp)
+
+/** Comment and selftext bodies, RIF density. */
+val RifBodyStyle = TextStyle(fontSize = 15.sp, lineHeight = 19.sp)
 
 @Composable
 fun RelishTheme(settings: AppSettings, content: @Composable () -> Unit) {

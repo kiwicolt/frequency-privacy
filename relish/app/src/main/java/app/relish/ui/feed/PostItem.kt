@@ -79,6 +79,7 @@ import app.relish.data.model.Post
 import app.relish.data.model.PostMedia
 import app.relish.data.model.VoteDir
 import app.relish.ui.theme.MetaTextStyle
+import app.relish.ui.theme.RifTitleStyle
 import app.relish.ui.theme.Relish
 import app.relish.util.compactCount
 import app.relish.util.timeAgo
@@ -146,7 +147,8 @@ fun PostItem(
         AnimatedVisibility(visible = selected, enter = expandVertically(), exit = shrinkVertically()) {
             if (display.largeCards) PostActionBar(post, actions) else RifActionBar(post, actions)
         }
-        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+        // RIF's list has no row dividers; cards keep them.
+        if (display.largeCards) HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
@@ -168,9 +170,9 @@ private fun CompactRow(
             if (!display.hideThumbnails) PostThumbnail(post, display, Modifier.size(sp.thumbnail + 8.dp), onContentClick)
         }
         if (display.leftHanded) { thumb(); if (!display.hideThumbnails) Spacer(Modifier.width(8.dp)) } else VoteColumn(post, actions)
-        Column(Modifier.weight(1f).padding(top = 2.dp)) {
+        Column(Modifier.weight(1f)) {
             PostTitle(post, isRead, rifStyle = true, showFlair = display.showFlair)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             Text(
                 "${post.numComments} comments  ${post.subreddit}",
                 style = MetaTextStyle,
@@ -305,7 +307,7 @@ fun PostTitle(post: Post, isRead: Boolean, maxLines: Int = Int.MAX_VALUE, rifSty
     }
     Text(
         text,
-        style = if (rifStyle) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleSmall,
+        style = if (rifStyle) RifTitleStyle else MaterialTheme.typography.titleSmall,
         inlineContent = inlineBadges(),
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,

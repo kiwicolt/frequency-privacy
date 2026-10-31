@@ -263,6 +263,7 @@ private fun PostHeader(post: Post, onVote: (VoteDir) -> Unit) {
                 html = post.selftextHtml,
                 fallback = post.selftext,
                 onLinkClick = nav::openLink,
+                style = app.relish.ui.theme.RifBodyStyle,
                 modifier = Modifier.fillMaxWidth().padding(start = sp.rowHorizontal + 4.dp, end = sp.rowHorizontal + 4.dp, bottom = 10.dp),
             )
         }
