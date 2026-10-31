@@ -9,7 +9,6 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Relish">
 
@@ -20,13 +19,13 @@
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
 
-            <!-- Filter 1: App Launcher -->
+            <!-- App Launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Filter 2: RedReader OAuth Redirect Callback -->
+            <!-- RedReader OAuth Redirect Callback -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
