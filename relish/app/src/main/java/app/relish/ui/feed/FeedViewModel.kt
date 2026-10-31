@@ -42,6 +42,8 @@ data class FeedState(
     val error: String? = null,
     val selectedKey: String? = null,
     val subreddit: Subreddit? = null,
+    /** Keys of the first item of page 2, 3, … (RIF's "page N" bars). */
+    val pageStarts: List<String> = emptyList(),
 )
 
 /** What the screen renders: [FeedState] after NSFW/filters/hide/read rules are applied. */
@@ -160,8 +162,11 @@ class FeedViewModel @Inject constructor(
                 .onSuccess { page ->
                     state.update { cur ->
                         val merged = if (reset) page.items else (cur.items + page.items).distinctBy { it.key }
+                        val existing = cur.items.mapTo(HashSet()) { it.key }
+                        val firstNew = page.items.firstOrNull { it.key !in existing }?.key
                         cur.copy(
                             items = merged,
+                            pageStarts = if (reset) emptyList() else cur.pageStarts + listOfNotNull(firstNew),
                             after = page.after,
                             endReached = page.after == null,
                             loading = false,

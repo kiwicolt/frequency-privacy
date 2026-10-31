@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Menu
@@ -177,6 +179,23 @@ fun FeedScreen(main: MainViewModel, source: FeedSource, vm: FeedViewModel = hilt
             ) {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(ui.visible, key = { it.key }, contentType = { it::class }) { item ->
+                      Column {
+                        val pageIndex = ui.state.pageStarts.indexOf(item.key)
+                        if (pageIndex >= 0) {
+                            PageBar(
+                                page = pageIndex + 2,
+                                onPrev = {
+                                    val target = ui.state.pageStarts.getOrNull(pageIndex - 1)
+                                    val idx = if (target == null) 0 else ui.visible.indexOfFirst { it.key == target }
+                                    scope.launch { listState.animateScrollToItem(idx.coerceAtLeast(0)) }
+                                },
+                                onNext = {
+                                    val target = ui.state.pageStarts.getOrNull(pageIndex + 1)
+                                    val idx = if (target == null) ui.visible.size else ui.visible.indexOfFirst { it.key == target }
+                                    scope.launch { listState.animateScrollToItem(idx.coerceAtLeast(0)) }
+                                },
+                            )
+                        }
                         when (item) {
                             is FeedItem.PostEntry -> {
                                 val post = item.post
@@ -196,6 +215,7 @@ fun FeedScreen(main: MainViewModel, source: FeedSource, vm: FeedViewModel = hilt
                                 onLinkClick = nav::openLink,
                             )
                         }
+                      }
                     }
                     item(key = "footer") { FeedFooter(ui, onRetry = vm::retry, onLoadMore = if (settings.autoLoadNextPage) null else vm::loadMore) }
                 }
@@ -230,6 +250,19 @@ fun FeedScreen(main: MainViewModel, source: FeedSource, vm: FeedViewModel = hilt
             confirmButton = { TextButton(onClick = { quitDialog = false; activity?.finish() }) { Text("Quit") } },
             dismissButton = { TextButton(onClick = { quitDialog = false }) { Text("Cancel") } },
         )
+    }
+}
+
+/** RIF's "▲ page 2 ▼" divider between loaded pages. */
+@Composable
+private fun PageBar(page: Int, onPrev: () -> Unit, onNext: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(Relish.colors.flairBackground),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onPrev) { Icon(Icons.Default.ArrowDropUp, "Previous page") }
+        Text("page $page", style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+        IconButton(onClick = onNext) { Icon(Icons.Default.ArrowDropDown, "Next page") }
     }
 }
 

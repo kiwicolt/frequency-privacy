@@ -59,6 +59,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -163,7 +168,11 @@ private fun CompactRow(
 ) {
     val sp = Relish.spacing
     Row(
-        Modifier.fillMaxWidth().padding(end = sp.rowHorizontal, top = sp.rowVertical, bottom = sp.rowVertical),
+        Modifier.fillMaxWidth().padding(
+            end = if (!display.hideThumbnails && !display.leftHanded) 0.dp else sp.rowHorizontal,
+            top = sp.rowVertical,
+            bottom = sp.rowVertical,
+        ),
         verticalAlignment = Alignment.Top,
     ) {
         val thumb: @Composable () -> Unit = {
@@ -192,15 +201,16 @@ private fun CompactRow(
 @Composable
 fun VoteColumn(post: Post, actions: PostActions) {
     val colors = Relish.colors
-    Column(Modifier.width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(
-            Icons.Default.ArrowDropUp, "Upvote",
-            tint = if (post.vote == VoteDir.UP) colors.upvote else colors.voteArrow,
-            modifier = Modifier.size(32.dp).clickable(onClick = actions.onUpvote),
-        )
+    // Up arrow beside the title's first line, score beside the second: never taller than the text.
+    Column(
+        Modifier.width(44.dp).padding(top = 1.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        VoteArrow(up = true, color = if (post.vote == VoteDir.UP) colors.upvote else colors.voteArrow, onClick = actions.onUpvote)
         Text(
             compactCount(post.score),
-            style = MetaTextStyle,
+            style = MetaTextStyle.copy(fontSize = 14.sp, lineHeight = 18.sp),
             color = when (post.vote) {
                 VoteDir.UP -> colors.upvote
                 VoteDir.DOWN -> colors.downvote
@@ -208,11 +218,30 @@ fun VoteColumn(post: Post, actions: PostActions) {
             },
             maxLines = 1,
         )
-        Icon(
-            Icons.Default.ArrowDropDown, "Downvote",
-            tint = if (post.vote == VoteDir.DOWN) colors.downvote else colors.voteArrow,
-            modifier = Modifier.size(32.dp).clickable(onClick = actions.onDownvote),
-        )
+        VoteArrow(up = false, color = if (post.vote == VoteDir.DOWN) colors.downvote else colors.voteArrow, onClick = actions.onDownvote)
+    }
+}
+
+/** RIF's flat triangle arrow, drawn compactly instead of a padded 24dp icon. */
+@Composable
+private fun VoteArrow(up: Boolean, color: Color, onClick: () -> Unit) {
+    Box(
+        Modifier.size(width = 44.dp, height = 18.dp)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = if (up) "Upvote" else "Downvote" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(width = 18.dp, height = 10.dp)) {
+            val path = Path().apply {
+                if (up) {
+                    moveTo(size.width / 2f, 0f); lineTo(size.width, size.height); lineTo(0f, size.height)
+                } else {
+                    moveTo(0f, 0f); lineTo(size.width, 0f); lineTo(size.width / 2f, size.height)
+                }
+                close()
+            }
+            drawPath(path, color)
+        }
     }
 }
 
@@ -373,7 +402,7 @@ fun PostThumbnail(post: Post, display: PostDisplay, modifier: Modifier, onClick:
     val obscure = (post.over18 && display.blurNsfw) || (post.spoiler && display.blurSpoilers)
     val url = post.thumbnail
     Box(
-        modifier.clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onClick),
+        modifier.clipToBounds().clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         when {
