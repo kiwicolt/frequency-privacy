@@ -138,6 +138,10 @@ fun SettingsScreen(main: MainViewModel, section: SettingsSection? = null, vm: Se
         }
     }
 
+    val rifImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) main.importRifBackup(uri)
+    }
+
     LaunchedEffect(Unit) { vm.events.collect { messenger(it) } }
     LaunchedEffect(section, username) { if (section == SettingsSection.WEB_PREFS) vm.loadAccountPrefs() }
 
@@ -310,6 +314,9 @@ fun SettingsScreen(main: MainViewModel, section: SettingsSection? = null, vm: Se
                 }
 
                 SettingsSection.BACKUP -> {
+                    item { ClickPref("Import from Reddit is Fun", "RIF backup .zip: subscriptions, read history, filters and settings") {
+                        rifImportLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+                    } }
                     item { ClickPref("Export settings", "Preferences, filters, local subscriptions, stars and shortcuts. No account info.") {
                         exportLauncher.launch("relish-settings.json")
                     } }

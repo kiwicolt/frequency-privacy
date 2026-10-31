@@ -166,7 +166,10 @@ fun AppDrawer(main: MainViewModel, currentSource: FeedSource, onNavigate: () -> 
         }
     }
 
-    if (importDialog) ImportSubscriptionsDialog(onImport = { main.importSubscriptions(it); importDialog = false }) { importDialog = false }
+    if (importDialog) ImportSubscriptionsDialog(
+        onImport = { main.importSubscriptions(it); importDialog = false },
+        onRifBackup = { main.importRifBackup(it); importDialog = false },
+    ) { importDialog = false }
 
     if (addShortcut) {
         var name by remember { mutableStateOf("") }
@@ -181,7 +184,10 @@ fun AppDrawer(main: MainViewModel, currentSource: FeedSource, onNavigate: () -> 
 }
 
 @Composable
-private fun ImportSubscriptionsDialog(onImport: (String) -> Unit, onDismiss: () -> Unit) {
+private fun ImportSubscriptionsDialog(onImport: (String) -> Unit, onRifBackup: (android.net.Uri) -> Unit, onDismiss: () -> Unit) {
+    val rifPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) onRifBackup(uri) }
     val context = androidx.compose.ui.platform.LocalContext.current
     var text by remember { mutableStateOf("") }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -197,8 +203,19 @@ private fun ImportSubscriptionsDialog(onImport: (String) -> Unit, onDismiss: () 
         title = { Text("Import subscriptions") },
         text = {
             Column {
+                androidx.compose.material3.Button(
+                    onClick = { rifPicker.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("From Reddit is Fun backup (.zip)") }
                 Text(
-                    "Paste your subscriptions multireddit link (old.reddit.com/subreddits/mine › sidebar), " +
+                    "RIF › Settings › Backup › Export settings. Imports subscriptions, read history, filters and settings.",
+                    style = MetaTextStyle, color = Relish.colors.subtle,
+                )
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Or paste your subscriptions multireddit link (old.reddit.com/subreddits/mine › sidebar), " +
                         "or a list of names (one per line, or comma separated).",
                     style = MetaTextStyle,
                 )

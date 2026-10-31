@@ -25,6 +25,7 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     private val repo: RedditRepository,
     private val prefs: PreferencesDataStore,
+    private val rifImporter: app.relish.data.rif.RifBackupImporter,
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = prefs.current
@@ -99,6 +100,19 @@ class MainViewModel @Inject constructor(
     fun filterSubreddit(name: String) = viewModelScope.launch {
         repo.addFilter(app.relish.data.local.FilterType.SUBREDDIT, name)
         _messages.send("r/$name filtered from front page & r/all")
+    }
+
+    private val _importing = MutableStateFlow(false)
+    val importing: StateFlow<Boolean> = _importing.asStateFlow()
+
+    /** Imports a Reddit is Fun backup zip (subscriptions, read history, filters, settings). */
+    fun importRifBackup(uri: android.net.Uri) = viewModelScope.launch {
+        _importing.value = true
+        _messages.send("Importing Reddit is Fun backup…")
+        runCatching { rifImporter.import(uri) }
+            .onSuccess { _messages.send(it.toString()) }
+            .onFailure { _messages.send(it.message ?: "Import failed") }
+        _importing.value = false
     }
 
     fun importSubscriptions(text: String) = viewModelScope.launch {

@@ -115,7 +115,7 @@ class RedditRepository @Inject constructor(
     @ApplicationScope private val scope: CoroutineScope,
 ) {
     init {
-        scope.launch { readDao.prune(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(180)) }
+        scope.launch { readDao.prune(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(365)) }
     }
 
     val username: StateFlow<String?> = secureStore.username

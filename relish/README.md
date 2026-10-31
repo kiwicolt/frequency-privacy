@@ -50,6 +50,20 @@ thread" stubs, and hidden and negative scores.
 The media uses public test assets: Google sample videos, Mux and Akamai test streams, Picsum
 photos, Wikimedia GIFs and the Blender Foundation's open films.
 
+## Importing from Reddit is Fun
+
+In Reddit is Fun, go to *Settings › Backup › Export settings* (or *Export settings AND HISTORY*),
+then import the `.zip` in Relish from the drawer (*Import subscriptions › From Reddit is Fun
+backup*) or from *Settings › Backup*. Relish reads RIF's `reddits.db`, `threadfilters.db`,
+`browserhistory.db` and `settings.xml`, and imports:
+
+* subscriptions (`frontpage = 1`), with their favourite and NSFW flags;
+* your most-visited NSFW subreddits, as NSFW shortcuts;
+* filters;
+* read marks from the post history;
+* the matching settings: theme, text size, back goes home, quit confirmation, auto-load, external
+  browser, albums, flair, left-handed mode, collapse child comments, comment sort and over 18.
+
 ## Hybrid network engine (NSFW handling)
 
 `RedditApiService` is a single Retrofit interface backed by two transports, because Reddit serves

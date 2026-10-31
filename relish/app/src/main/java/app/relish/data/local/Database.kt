@@ -60,6 +60,9 @@ interface ReadPostDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entity: ReadPostEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(entities: List<ReadPostEntity>)
+
     @Query("DELETE FROM read_posts")
     suspend fun clear()
 
@@ -115,6 +118,9 @@ abstract class SubscriptionDao {
     @Query("SELECT * FROM subscriptions ORDER BY name COLLATE NOCASE")
     abstract fun observeAll(): Flow<List<SubscriptionEntity>>
 
+    @Query("SELECT * FROM subscriptions")
+    abstract suspend fun allOnce(): List<SubscriptionEntity>
+
     @Upsert
     abstract suspend fun upsert(entity: SubscriptionEntity)
 
@@ -146,6 +152,9 @@ abstract class SubscriptionDao {
 interface NsfwShortcutDao {
     @Query("SELECT * FROM nsfw_shortcuts ORDER BY position, name COLLATE NOCASE")
     fun observeAll(): Flow<List<NsfwShortcutEntity>>
+
+    @Query("SELECT * FROM nsfw_shortcuts")
+    suspend fun allOnce(): List<NsfwShortcutEntity>
 
     @Upsert
     suspend fun upsert(entity: NsfwShortcutEntity)
