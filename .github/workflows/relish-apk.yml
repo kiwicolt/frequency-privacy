@@ -32,7 +32,14 @@ jobs:
 
       # Release = R8-optimised and non-debuggable: much smoother Compose scrolling than debug.
       - name: Build release + debug APKs and run unit tests
-        run: ./gradlew --no-daemon --stacktrace assembleRelease assembleDebug testDebugUnitTest
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon assembleRelease assembleDebug testDebugUnitTest 2>&1 | tee build.log
+
+      # Surface compiler/KSP errors at the end of the log, where they're easy to find.
+      - name: Show build errors
+        if: failure()
+        run: grep -E "^e: |^w: .*error|error:|FAILED" build.log | head -60 || true
 
       - name: Rename APKs
         run: |
