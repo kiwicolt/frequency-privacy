@@ -80,6 +80,7 @@ class SettingsViewModel @Inject constructor(
     // Behaviour
     fun setDefaultSort(v: Sort) = io { prefs.setDefaultSort(v) }
     fun setCommentSort(v: CommentSort) = io { prefs.setDefaultCommentSort(v) }
+    fun setDemoMode(v: Boolean) = io { prefs.setDemoMode(v) }
     fun setStartup(v: String) = io { prefs.setStartupSubreddit(v) }
 
     // History & privacy

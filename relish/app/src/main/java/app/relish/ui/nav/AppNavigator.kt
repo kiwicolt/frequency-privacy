@@ -91,6 +91,10 @@ class AppNavigator(
             }
         }
         if (host == "redd.it" && segs.size == 1) return openComments(segs[0])
+        // YouTube: hand to the YouTube app (Android picks it for youtube.com/youtu.be), like RIF did.
+        if (host == "youtube.com" || host == "m.youtube.com" || host == "youtu.be" || host == "music.youtube.com") {
+            return openInBrowser(url)
+        }
         if (host == "v.redd.it" && segs.isNotEmpty() && settings().internalMediaViewer) {
             return openMedia(PostMedia.Video("https://v.redd.it/${segs[0]}/HLSPlaylist.m3u8"), "")
         }

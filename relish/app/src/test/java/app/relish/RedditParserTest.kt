@@ -9,6 +9,7 @@ import app.relish.data.remote.RedditParser
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -92,5 +93,31 @@ class RedditParserTest {
             FeedSource.User("someone", "submitted"), FeedSource.Saved("me"), FeedSource.Search("cats | dogs", "pics"),
             FeedSource.Search("q", null),
         ).forEach { assertEquals(it, FeedSource.decode(it.encode())) }
+    }
+}
+
+class DemoDataTest {
+    @Test
+    fun `demo feed covers every media type and paginates once`() {
+        val first = app.relish.data.demo.DemoData.feed(FeedSource.FrontPage, null)
+        val media = first.items.map { (it as app.relish.data.model.FeedItem.PostEntry).post.media }
+        assertTrue(media.any { it is PostMedia.Image })
+        assertTrue(media.any { it is PostMedia.Video && it.isGif })
+        assertTrue(media.any { it is PostMedia.Video && it.url.endsWith(".m3u8") })
+        assertTrue(media.any { it is PostMedia.Gallery })
+        assertTrue(media.any { it is PostMedia.Audio })
+        assertTrue(media.any { it is PostMedia.Link && it.url.contains("youtu") })
+        assertEquals("demo_page_2", first.after)
+        assertNull(app.relish.data.demo.DemoData.feed(FeedSource.FrontPage, first.after).after)
+    }
+
+    @Test
+    fun `demo comment tree is well formed`() {
+        val nodes = app.relish.data.demo.DemoData.postWithComments("img1").comments
+        assertEquals(0, nodes.first().depth)
+        // Depth never jumps by more than one level going down the list.
+        nodes.zipWithNext().forEach { (a, b) -> assertTrue("${a.fullname} -> ${b.fullname}", b.depth <= a.depth + 1) }
+        val more = nodes.filterIsInstance<MoreComments>().first { it.children.isNotEmpty() }
+        assertEquals(more.children.size, app.relish.data.demo.DemoData.moreChildren("img1", more).size)
     }
 }

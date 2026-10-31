@@ -26,6 +26,25 @@ You need the Android SDK (compileSdk 35) and JDK 17. The app runs on minSdk 26 (
   also build one in with `-PredditClientId=…`. Reddit now often blocks logged-out access from apps,
   so logging in is required in practice.
 
+## Demo mode
+
+To try the app without a client ID, turn on *Settings › Account › Demo mode*, or tap **Try demo
+mode** in the drawer or on the login screen. Feeds, comments, search and the inbox are then served
+from built-in sample content, and nothing is sent to Reddit. The sample posts cover:
+
+* landscape and portrait images, animated GIFs, and a GIF-style looping mp4;
+* an mp4 with sound, HLS and DASH streams, an mp3, and galleries with mixed images and video;
+* YouTube links, which open in the YouTube app;
+* web links, formatted text posts, and NSFW, spoiler, stickied and locked posts;
+* a broken image, to show the error state;
+* a second page of posts, to test infinite scroll.
+
+Comments include a nine-level thread, moderator and OP comments, "load more" and "continue this
+thread" stubs, and hidden and negative scores.
+
+The media uses public test assets: Google sample videos, Mux and Akamai test streams, Picsum
+photos, Wikimedia GIFs and the Blender Foundation's open films.
+
 ## Hybrid network engine (NSFW handling)
 
 `RedditApiService` is a single Retrofit interface backed by two transports, because Reddit serves

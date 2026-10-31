@@ -2,6 +2,7 @@ package app.relish.data.repo
 
 import android.content.Context
 import android.net.Uri
+import app.relish.data.demo.DemoData
 import app.relish.data.local.FilterDao
 import app.relish.data.local.FilterEntity
 import app.relish.data.local.FilterType
@@ -94,6 +95,9 @@ class RedditRepository @Inject constructor(
     }
 
     val username: StateFlow<String?> = secureStore.username
+
+    /** Demo mode: every read is served from [DemoData] and actions succeed locally. */
+    private val demo: Boolean get() = prefs.current.value.demoMode
     val isLoggedIn: Boolean get() = oauth.isLoggedIn
 
     // =========================================================================================
@@ -168,6 +172,7 @@ class RedditRepository @Inject constructor(
         after: String?,
         refresh: Boolean,
     ): Listing<FeedItem> {
+        if (demo) return DemoData.feed(source, after)
         val cache = if (refresh) NO_CACHE else null
         val t = if (sort.hasTime) time.param else null
         val emptyListing: (kotlinx.serialization.json.JsonElement) -> Boolean = {
@@ -195,6 +200,7 @@ class RedditRepository @Inject constructor(
     }
 
     suspend fun postWithComments(postId: String, sort: CommentSort, focusCommentId: String?, refresh: Boolean): PostWithComments {
+        if (demo) return DemoData.postWithComments(postId)
         val cache = if (refresh) NO_CACHE else null
         val json = browse {
             if (focusCommentId != null) commentThread(postId, focusCommentId, sort = sort.param, cacheControl = cache)
@@ -204,6 +210,7 @@ class RedditRepository @Inject constructor(
     }
 
     suspend fun moreChildren(linkFullname: String, more: MoreComments, sort: CommentSort): List<CommentNode> {
+        if (demo) return DemoData.moreChildren(linkFullname.removePrefix("t3_"), more)
         // The endpoint accepts at most 100 ids per call.
         return more.children.chunked(100).flatMap { chunk ->
             val json = browse { this.moreChildren(linkFullname, chunk.joinToString(","), sort.param) }
@@ -212,9 +219,10 @@ class RedditRepository @Inject constructor(
     }
 
     suspend fun searchSubreddits(query: String): List<Subreddit> =
-        RedditParser.subreddits(browse { this.searchSubreddits(query) }).items
+        if (demo) DemoData.subreddits(query) else RedditParser.subreddits(browse { this.searchSubreddits(query) }).items
 
-    suspend fun subredditAbout(name: String): Subreddit = RedditParser.subredditAbout(browse { this.subredditAbout(name) })
+    suspend fun subredditAbout(name: String): Subreddit =
+        if (demo) DemoData.about(name) else RedditParser.subredditAbout(browse { this.subredditAbout(name) })
 
     suspend fun resolveRedgifs(id: String): String = redgifs.resolve(id)
 
@@ -274,9 +282,11 @@ class RedditRepository @Inject constructor(
         if (!oauth.isLoggedIn) emptyList() else RedditParser.multis(account("view multireddits") { myMultireddits() })
 
     suspend fun inbox(where: String, after: String?): Listing<Message> =
-        RedditParser.messages(account("read your inbox") { this.inbox(where, after) })
+        if (demo) Listing(DemoData.inbox(), null)
+        else RedditParser.messages(account("read your inbox") { this.inbox(where, after) })
 
     suspend fun markMessageRead(fullname: String) {
+        if (demo) return
         account("mark messages read") { readMessage(fullname) }
     }
 
@@ -285,21 +295,24 @@ class RedditRepository @Inject constructor(
     // =========================================================================================
 
     suspend fun vote(fullname: String, dir: VoteDir) {
+        if (demo) return
         account("vote") { this.vote(fullname, dir.value) }.throwIfFailed()
     }
 
     suspend fun setSaved(fullname: String, saved: Boolean) {
+        if (demo) return
         account("save") { if (saved) save(fullname) else unsave(fullname) }.throwIfFailed()
     }
 
     /** Hidden posts are always recorded locally; when logged in they're hidden on the account too. */
     suspend fun setHidden(fullname: String, hidden: Boolean) {
         if (hidden) hiddenDao.insert(HiddenPostEntity(fullname)) else hiddenDao.delete(fullname)
-        if (oauth.isLoggedIn) runCatching { account("hide") { if (hidden) hide(fullname) else unhide(fullname) } }
+        if (oauth.isLoggedIn && !demo) runCatching { account("hide") { if (hidden) hide(fullname) else unhide(fullname) } }
     }
 
     suspend fun reply(parentFullname: String, markdown: String, depth: Int): Comment? =
-        RedditParser.createdComment(account("comment") { comment(parentFullname, markdown) }, depth)
+        if (demo) DemoData.reply(parentFullname, markdown, depth)
+        else RedditParser.createdComment(account("comment") { comment(parentFullname, markdown) }, depth)
 
     /**
      * Logged in: subscribes on the account. Logged out (or [localOnly]): keeps a device-only
@@ -307,7 +320,7 @@ class RedditRepository @Inject constructor(
      */
     suspend fun setSubscribed(name: String, subscribed: Boolean, over18: Boolean, localOnly: Boolean = false) {
         val clean = name.trim().removePrefix("r/").removePrefix("/r/")
-        if (oauth.isLoggedIn && !localOnly) {
+        if (oauth.isLoggedIn && !localOnly && !demo) {
             account("subscribe") { subscribe(if (subscribed) "sub" else "unsub", clean) }.throwIfFailed()
         }
         if (subscribed) subscriptionDao.upsert(SubscriptionEntity(clean, local = !oauth.isLoggedIn || localOnly, over18 = over18))

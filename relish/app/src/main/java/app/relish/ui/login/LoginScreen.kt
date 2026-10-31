@@ -114,7 +114,7 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                clientId.isBlank() -> ClientIdSetup(onSave = vm::setClientId, onImport = importClientId)
+                clientId.isBlank() -> ClientIdSetup(onSave = vm::setClientId, onImport = importClientId, onDemo = { main.setDemoMode(true); nav.back() })
                 embedded -> Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Login page ${page + 1} of ${vm.pageCount}", style = MetaTextStyle, modifier = Modifier.weight(1f))
@@ -171,6 +171,9 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
                         style = MetaTextStyle,
                     )
                     Spacer(Modifier.height(16.dp))
+                    TextButton(onClick = { main.setDemoMode(true); nav.back() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("No client id yet? Try demo mode (offline sample content)")
+                    }
                     Text("Client id: $clientId", style = MetaTextStyle)
                     TextButton(onClick = importClientId, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                         Text("Import client id from file (reddit_client_id_revanced.txt)")
@@ -188,7 +191,7 @@ fun LoginScreen(main: MainViewModel, vm: LoginViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun ClientIdSetup(onSave: (String) -> Unit, onImport: () -> Unit) {
+private fun ClientIdSetup(onSave: (String) -> Unit, onImport: () -> Unit, onDemo: () -> Unit) {
     var id by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text("One-time setup", style = MaterialTheme.typography.titleLarge)
@@ -209,5 +212,6 @@ private fun ClientIdSetup(onSave: (String) -> Unit, onImport: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Button(onClick = { onSave(id) }, enabled = id.length >= 10) { Text("Save and continue") }
         TextButton(onClick = onImport) { Text("Or import it from a file (e.g. reddit_client_id_revanced.txt)") }
+        TextButton(onClick = onDemo) { Text("No client id yet? Try demo mode (offline sample content)") }
     }
 }

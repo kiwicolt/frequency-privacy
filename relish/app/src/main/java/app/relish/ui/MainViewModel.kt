@@ -79,6 +79,11 @@ class MainViewModel @Inject constructor(
         _messages.send("Logged out")
     }
 
+    fun setDemoMode(on: Boolean) = viewModelScope.launch {
+        prefs.setDemoMode(on)
+        _messages.send(if (on) "Demo mode on: showing offline sample content" else "Demo mode off")
+    }
+
     fun toggleNightMode(systemDark: Boolean) = viewModelScope.launch { prefs.toggleNightMode(systemDark) }
 
     fun setSubscribed(name: String, subscribed: Boolean, over18: Boolean = false) = viewModelScope.launch {

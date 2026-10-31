@@ -110,8 +110,14 @@ fun AppDrawer(main: MainViewModel, currentSource: FeedSource, onNavigate: () -> 
                             }
                         }
                     } else {
-                        Text("Browsing anonymously", style = MaterialTheme.typography.titleMedium)
-                        Text("NSFW via web JSON + over18 cookie", style = MetaTextStyle, color = Relish.colors.subtle)
+                        Text(if (settings.demoMode) "Demo mode" else "Not logged in", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (settings.demoMode) "Offline sample content; nothing is sent to Reddit" else "Log in to browse Reddit",
+                            style = MetaTextStyle, color = Relish.colors.subtle,
+                        )
+                        TextButton(onClick = { main.setDemoMode(!settings.demoMode) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+                            Text(if (settings.demoMode) "Exit demo mode" else "Try demo mode")
+                        }
                         TextButton(onClick = { goTo(nav::openLogin) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
                             Icon(Icons.AutoMirrored.Filled.Login, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
@@ -125,6 +131,9 @@ fun AppDrawer(main: MainViewModel, currentSource: FeedSource, onNavigate: () -> 
             item { DrawerRow(Icons.Default.Home, "Front page", currentSource == FeedSource.FrontPage) { go(FeedSource.FrontPage) } }
             item { DrawerRow(Icons.Default.Public, "r/all", currentSource == FeedSource.Subreddit("all")) { go(FeedSource.Subreddit("all")) } }
             item { DrawerRow(Icons.AutoMirrored.Filled.TrendingUp, "r/popular", currentSource == FeedSource.Subreddit("popular")) { go(FeedSource.Subreddit("popular")) } }
+            if (username == null && settings.demoMode) {
+                item { DrawerRow(Icons.Default.Email, "Inbox (demo)", false) { goTo(nav::openInbox) } }
+            }
             username?.let { user ->
                 item { DrawerRow(Icons.Default.AccountCircle, "Profile", currentSource == FeedSource.User(user)) { go(FeedSource.User(user)) } }
                 item {

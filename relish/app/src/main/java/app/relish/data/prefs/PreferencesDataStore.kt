@@ -81,6 +81,8 @@ data class AppSettings(
     val defaultSort: Sort = Sort.HOT,
     val defaultCommentSort: CommentSort = CommentSort.BEST,
     val startupSubreddit: String = "",
+    /** Offline sample content instead of Reddit (for trying the app without an API key). */
+    val demoMode: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_ACCENT = 0xFFFF4500
@@ -135,6 +137,7 @@ class PreferencesDataStore @Inject constructor(
         val defaultSort = stringPreferencesKey("default_sort")
         val commentSort = stringPreferencesKey("default_comment_sort")
         val startup = stringPreferencesKey("startup_subreddit")
+        val demo = booleanPreferencesKey("demo_mode")
     }
 
     val settings: Flow<AppSettings> = store.data
@@ -174,6 +177,7 @@ class PreferencesDataStore @Inject constructor(
             defaultSort = enumOr(this[K.defaultSort], d.defaultSort),
             defaultCommentSort = enumOr(this[K.commentSort], d.defaultCommentSort),
             startupSubreddit = this[K.startup] ?: d.startupSubreddit,
+            demoMode = this[K.demo] ?: d.demoMode,
         )
     }
 
@@ -214,6 +218,7 @@ class PreferencesDataStore @Inject constructor(
     suspend fun setSaveSearchHistory(v: Boolean) = store.edit { it[K.searchHistory] = v }
     suspend fun setDefaultSort(v: Sort) = store.edit { it[K.defaultSort] = v.name }
     suspend fun setDefaultCommentSort(v: CommentSort) = store.edit { it[K.commentSort] = v.name }
+    suspend fun setDemoMode(v: Boolean) = store.edit { it[K.demo] = v }
     suspend fun setStartupSubreddit(v: String) = store.edit { it[K.startup] = v.trim().removePrefix("r/") }
 
     private inline fun <reified E : Enum<E>> enumOr(raw: String?, default: E): E =

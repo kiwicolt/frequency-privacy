@@ -111,6 +111,10 @@ fun SettingsScreen(main: MainViewModel, vm: SettingsViewModel = hiltViewModel())
             // ------------------------------------------------------------------ Account
             item { Header("Account") }
             item {
+                SwitchPref("Demo mode", "Offline sample posts (images, GIFs, videos, YouTube, galleries…) instead of Reddit",
+                    s.demoMode, vm::setDemoMode)
+            }
+            item {
                 if (username != null) {
                     ClickPref("Logged in as u/$username", "Tap to log out") {
                         dialog = SettingsDialog.Confirm("Log out?", "Tokens will be revoked and removed from this device.") { main.logout() }
