@@ -11,18 +11,22 @@ android {
     namespace = "app.relish"
     compileSdk = 35
 
-    defaultConfig {
+        defaultConfig {
         applicationId = "app.relish"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
         vectorDrawables { useSupportLibrary = true }
-        // Optional built-in Reddit "installed app" client id: -PredditClientId=... at build time.
-        // Without it the app asks for one (Settings › Account, or the login screen).
-        val clientId = (project.findProperty("redditClientId") as String?).orEmpty()
+
+        // Allow passing properties at build time, or default to RIF spoof values
+        val clientId = (project.findProperty("redditClientId") as String?) ?: "96oTCRcyGdmvGQvHIk7MHQ"
+        val redirectUri = (project.findProperty("redditRedirectUri") as String?) ?: "redditisfun://auth"
+        
         buildConfigField("String", "REDDIT_CLIENT_ID", "\"$clientId\"")
+        buildConfigField("String", "REDDIT_REDIRECT_URI", "\"$redirectUri\"")
     }
+
 
     // Fixed key for personal sideloading so each new build installs over the previous one.
     // Not a secret: it only identifies "builds of this repo" to Android's package manager.
