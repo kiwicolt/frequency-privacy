@@ -390,6 +390,18 @@ class RedditRepository @Inject constructor(
     }
     suspend fun removeNsfwShortcut(name: String) = shortcutDao.delete(name)
 
+    /**
+     * Saves device-local subscriptions from pasted text: a multireddit URL (`/r/a+b+c`), or names
+     * separated by lines/commas/spaces, with or without `r/`. Returns how many were added.
+     */
+    suspend fun importSubscriptions(text: String): Int = withContext(Dispatchers.IO) {
+        val names = parseSubredditNames(text)
+        val existing = subscriptionDao.observeAll().first().mapTo(HashSet()) { it.name.lowercase() }
+        val fresh = names.filter { it.lowercase() !in existing }
+        fresh.forEach { subscriptionDao.upsert(SubscriptionEntity(it, local = true)) }
+        fresh.size
+    }
+
     // =========================================================================================
     // Backup (RIF: Settings › Backup). Never includes tokens, cookies or the client id.
     // =========================================================================================
@@ -489,6 +501,20 @@ class RedditRepository @Inject constructor(
                 }
             }
         }
+
+        private val SUB_NAME = Regex("""^[A-Za-z0-9][A-Za-z0-9_]{1,20}$""")
+        private val NOT_SUBS = setOf("all", "popular", "random", "friends", "mod", "r", "u", "user", "www", "reddit", "com", "https", "http")
+
+        /** Pulls subreddit names out of a multireddit link or a free-form list. */
+        fun parseSubredditNames(text: String): List<String> =
+            text.split(Regex("""[\s,;|]+"""))
+                .flatMap { token ->
+                    token.substringAfter("/r/", token).removePrefix("r/")
+                        .substringBefore('/').substringBefore('?')
+                        .split('+')
+                }
+                .filter { SUB_NAME.matches(it) && it.lowercase() !in NOT_SUBS }
+                .distinctBy { it.lowercase() }
 
         fun friendlyError(e: Throwable): String = when (e) {
             is BothRoutesFailedException ->

@@ -139,3 +139,17 @@ class CommentFoldingTest {
         assertEquals(opened.size, opened.map { it.key }.toSet().size)
     }
 }
+
+class SubscriptionImportTest {
+    private fun parse(s: String) = app.relish.data.repo.RedditRepository.parseSubredditNames(s)
+
+    @Test
+    fun `parses a multireddit link`() {
+        assertEquals(listOf("AirReps", "Android", "AndroidAuto"), parse("https://old.reddit.com/r/AirReps+Android+AndroidAuto/"))
+    }
+
+    @Test
+    fun `parses free-form lists and skips junk`() {
+        assertEquals(listOf("pics", "AndroidTV", "nrl"), parse("r/pics\n/r/AndroidTV/, nrl  all popular x"))
+    }
+}

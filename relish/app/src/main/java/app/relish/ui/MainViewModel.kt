@@ -101,6 +101,11 @@ class MainViewModel @Inject constructor(
         _messages.send("r/$name filtered from front page & r/all")
     }
 
+    fun importSubscriptions(text: String) = viewModelScope.launch {
+        val n = runCatching { repo.importSubscriptions(text) }.getOrElse { _messages.send(RedditRepository.friendlyError(it)); return@launch }
+        _messages.send(if (n == 0) "No new subreddits found in that text" else "Imported $n subreddit${if (n == 1) "" else "s"}")
+    }
+
     fun addNsfwShortcut(name: String) = viewModelScope.launch { repo.addNsfwShortcut(name) }
     fun removeNsfwShortcut(name: String) = viewModelScope.launch { repo.removeNsfwShortcut(name) }
 

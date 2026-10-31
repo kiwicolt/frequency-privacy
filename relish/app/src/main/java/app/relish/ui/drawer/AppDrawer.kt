@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallMerge
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
@@ -81,6 +82,7 @@ fun AppDrawer(main: MainViewModel, currentSource: FeedSource, onNavigate: () -> 
     var typed by remember { mutableStateOf("") }
     var showMultis by remember { mutableStateOf(false) }
     var addShortcut by remember { mutableStateOf(false) }
+    var importDialog by remember { mutableStateOf(false) }
     val colors = Relish.colors
 
     fun go(source: FeedSource) {
@@ -148,7 +150,12 @@ fun AppDrawer(main: MainViewModel, currentSource: FeedSource, onNavigate: () -> 
             }
 
             if (query.isEmpty()) {
-                if (subs.isEmpty()) item { Hint("No subscriptions yet. Open a subreddit and choose Subscribe from its menu.") }
+                if (subs.isEmpty()) item { Hint("No subscriptions yet. Open a subreddit and choose Subscribe from its menu, or import your list.") }
+                item {
+                    TextButton(onClick = { importDialog = true }, modifier = Modifier.padding(start = 8.dp)) {
+                        Icon(Icons.Default.Download, null, Modifier.size(18.dp)); Text(" Import subscriptions")
+                    }
+                }
                 if (settings.showNsfw) item {
                     TextButton(onClick = { addShortcut = true }, modifier = Modifier.padding(start = 8.dp)) {
                         Icon(Icons.Default.Add, null, Modifier.size(18.dp)); Text(" Add NSFW shortcut")
@@ -158,6 +165,8 @@ fun AppDrawer(main: MainViewModel, currentSource: FeedSource, onNavigate: () -> 
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
+
+    if (importDialog) ImportSubscriptionsDialog(onImport = { main.importSubscriptions(it); importDialog = false }) { importDialog = false }
 
     if (addShortcut) {
         var name by remember { mutableStateOf("") }
@@ -169,6 +178,44 @@ fun AppDrawer(main: MainViewModel, currentSource: FeedSource, onNavigate: () -> 
             dismissButton = { TextButton(onClick = { addShortcut = false }) { Text("Cancel") } },
         )
     }
+}
+
+@Composable
+private fun ImportSubscriptionsDialog(onImport: (String) -> Unit, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var text by remember { mutableStateOf("") }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) runCatching {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+        }.getOrNull()?.let { text = it.take(200_000) }
+    }
+    val found = remember(text) { app.relish.data.repo.RedditRepository.parseSubredditNames(text) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import subscriptions") },
+        text = {
+            Column {
+                Text(
+                    "Paste your subscriptions multireddit link (old.reddit.com/subreddits/mine › sidebar), " +
+                        "or a list of names (one per line, or comma separated).",
+                    style = MetaTextStyle,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    text, { text = it },
+                    placeholder = { Text("reddit.com/r/AirReps+Android+…") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 220.dp),
+                )
+                TextButton(onClick = { picker.launch(arrayOf("text/*", "*/*")) }) { Text("From file…") }
+                Text(if (found.isEmpty()) "No subreddits recognised yet" else "${found.size} found: " + found.take(6).joinToString() + if (found.size > 6) "…" else "",
+                    style = MetaTextStyle, color = Relish.colors.subtle)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onImport(text) }, enabled = found.isNotEmpty()) { Text("Import ${found.size}") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 private val RowHeight = 64.dp
