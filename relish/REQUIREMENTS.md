@@ -328,7 +328,64 @@ run either turn on **demo mode** (no account needed) or, to log in, register you
 
 ---
 
-## 8. Known constraints (state honestly to any rebuilder)
+## 8. How the assistant (Claude) drives GitHub — the commit → build → release loop
+
+The owner works **only from a phone** and cannot run a build. The entire loop is operated by the
+coding assistant running in a cloud session that has a checkout of the repo and authenticated
+GitHub access. Reproduce this operating model:
+
+### 8.1 What the assistant has
+- A working git checkout of the repository in its cloud container, with push access to the owner's
+  feature branch (over HTTPS; credentials are injected by the environment — no secret is stored in
+  the repo).
+- Read access to GitHub's API for Actions and Releases (in this project via the GitHub MCP tools
+  prefixed `mcp__github__*`; equivalently the `gh` CLI or REST API). There is **no** `gh` binary in
+  this environment — the MCP tools are used instead.
+
+### 8.2 The loop, step by step
+1. **Edit** source files in the checkout (the assistant's own file tools), keeping changes scoped to
+   `relish/`.
+2. **Commit** with the git CLI. Commit messages end with the attribution footer:
+   ```
+   Co-Authored-By: Claude <noreply@anthropic.com>
+   Claude-Session: <session url>
+   ```
+3. **Push** to the owner's feature branch: `git push -u origin <branch>`. If the push is rejected as
+   non-fast-forward (the owner pushed their own commits from the phone/web UI), the assistant
+   `git fetch origin <branch>` then `git rebase origin/<branch>` and pushes again. It never
+   force-pushes over the owner's commits.
+4. The push matches the workflow trigger (`paths: relish/**`), so **GitHub Actions** starts a build
+   automatically. No manual dispatch is needed.
+5. **Poll the run**: list workflow runs for `relish-apk.yml`, read the latest run's status and
+   conclusion. (A background timer is used to wait a few minutes between checks rather than busy-
+   polling.)
+6. **On success**: read the new **Release** (tag `relish-build-<run#>`) and give the owner the
+   release URL + the asset name `relish-<run#>.apk` to download and install on the phone.
+7. **On failure**: fetch the failed job's logs, find the compiler/manifest error (the workflow has a
+   "Show build errors" step that greps `^e: | Compilation error | FAILED` to the end of the log so
+   it is easy to locate), fix the code, and repeat from step 1.
+
+### 8.3 Reading build results (GitHub MCP tool equivalents)
+- List runs: `mcp__github__actions_list` (`list_workflow_runs` for `relish-apk.yml`).
+- Run detail / conclusion: `mcp__github__actions_get` (`get_workflow_run`).
+- Failed-job logs: `mcp__github__get_job_logs` (with `failed_only: true, return_content: true`).
+- Releases: `mcp__github__list_releases`.
+Any assistant without these tools can use the GitHub REST API or `gh run list` / `gh run view --log`
+/ `gh release list` to the same effect.
+
+### 8.4 What the owner does from the phone
+- Download/install the APK from the Release page (allow "install unknown apps").
+- Optionally edit files or commit directly through GitHub's mobile web UI (which also triggers a
+  build). When the owner has pushed their own commits, the assistant rebases onto them (8.2 step 3).
+- Send screenshots/feedback; the assistant iterates and pushes a new build.
+
+### 8.5 Branching
+Development happens on a long-lived feature branch (here `ccr-400b20b6-ptg5u6`). The owner has also
+created ad-hoc branches (e.g. `new`) via the web UI; each push to any branch under `relish/**`
+produces its own build and `relish-build-<run#>` release. Keep one branch authoritative to avoid
+confusion over which release is current.
+
+## 9. Known constraints (state honestly to any rebuilder)
 - Reddit no longer reliably serves third-party clients: self-service key creation at
   `prefs/apps` often returns HTTP 500, the public `.json` layer returns bot-check interstitials to
   non-browser clients, and personal API-access requests are frequently declined. The app is correct;
